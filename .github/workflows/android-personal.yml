@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-personal-${{ github.ref }}
+  group: android-personal-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: true
 
 jobs:
