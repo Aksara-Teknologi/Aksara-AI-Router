@@ -133,6 +133,12 @@ dengan konsekuensi cache dingin. Akun yang menerima 429/401/403/503 diberi coold
 
 Contoh request Codex dari Termux, setelah `AKSARA_API_KEY` diisi secara lokal:
 
+Bearer New API berlaku pada semua endpoint. SDK Claude juga dapat mengirim API
+key New API sebagai `x-api-key`; SDK Gemini/Antigravity dapat memakai
+`x-goog-api-key` atau `?key=`. Header lebih disarankan daripada query. Credential
+gateway dihapus sebelum hook plugin; upstream menerima token OAuth akun terpilih.
+Jika ada beberapa bentuk autentikasi, header Authorization menang.
+
 ```sh
 curl http://localhost:3000/codex-oauth/v1/responses \
   -H "Authorization: Bearer $AKSARA_API_KEY" \

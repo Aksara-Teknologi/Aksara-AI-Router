@@ -2635,6 +2635,7 @@ func TestNativeRouteCredentialRewritesOnlyTheVendorsOwnForm(t *testing.T) {
 		wantAuthorization    string
 		wantRequestURI       string
 		wantGoogleKeyRemains bool
+		wantClaudeKeyRemains bool
 	}{
 		{name: "Vidu Token form", plugin: "vidu", path: "/ent/v2/text2video", headers: map[string]string{"Authorization": "Token gateway-token"}, wantAuthorization: "Bearer gateway-token"},
 		{name: "Token form elsewhere", plugin: "doubao", path: "/api/v3/contents/generations/tasks", headers: map[string]string{"Authorization": "Token gateway-token"}, wantAuthorization: "Token gateway-token"},
@@ -2642,6 +2643,11 @@ func TestNativeRouteCredentialRewritesOnlyTheVendorsOwnForm(t *testing.T) {
 		{name: "Gemini query form", plugin: "google", path: "/google/v1beta/models/m/operations/t?alt=json&key=gateway-token", wantAuthorization: "Bearer gateway-token", wantRequestURI: "/google/v1beta/models/m/operations/t?alt=json"},
 		{name: "Gemini forms do not replace Authorization", plugin: "google", path: "/v1beta/models/m:predictLongRunning?key=query-token", headers: map[string]string{"Authorization": "Bearer chosen-token", "X-Goog-Api-Key": "header-token"}, wantAuthorization: "Bearer chosen-token", wantRequestURI: "/v1beta/models/m:predictLongRunning"},
 		{name: "Gemini header form elsewhere", plugin: "vidu", path: "/vidu/ent/v2/text2video", headers: map[string]string{"X-Goog-Api-Key": "gateway-token"}, wantGoogleKeyRemains: true},
+		{name: "Claude personal SDK header", plugin: "claude-oauth", path: "/claude-oauth/v1/messages", headers: map[string]string{"X-Api-Key": "gateway-token"}, wantAuthorization: "Bearer gateway-token"},
+		{name: "Claude Authorization wins", plugin: "claude-oauth", path: "/claude-oauth/v1/messages", headers: map[string]string{"X-Api-Key": "other-token", "Authorization": "Bearer chosen-token"}, wantAuthorization: "Bearer chosen-token"},
+		{name: "Claude header is not enabled elsewhere", plugin: "vidu", path: "/vidu/ent/v2/text2video", headers: map[string]string{"X-Api-Key": "gateway-token"}, wantClaudeKeyRemains: true},
+		{name: "Antigravity SDK header", plugin: "antigravity-oauth", path: "/antigravity-oauth/v1beta/models/m:generateContent", headers: map[string]string{"X-Goog-Api-Key": "gateway-token"}, wantAuthorization: "Bearer gateway-token"},
+		{name: "Antigravity SDK query is stripped", plugin: "antigravity-oauth", path: "/antigravity-oauth/v1beta/models/m:generateContent?key=gateway-token", wantAuthorization: "Bearer gateway-token", wantRequestURI: "/antigravity-oauth/v1beta/models/m:generateContent"},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			router := gin.New()
@@ -2664,6 +2670,7 @@ func TestNativeRouteCredentialRewritesOnlyTheVendorsOwnForm(t *testing.T) {
 			require.NotNil(t, captured)
 			assert.Equal(t, testCase.wantAuthorization, captured.Header.Get("Authorization"))
 			assert.Equal(t, testCase.wantGoogleKeyRemains, captured.Header.Get("X-Goog-Api-Key") != "")
+			assert.Equal(t, testCase.wantClaudeKeyRemains, captured.Header.Get("X-Api-Key") != "")
 			assert.NotContains(t, query, "key")
 			if testCase.wantRequestURI != "" {
 				assert.Equal(t, testCase.wantRequestURI, captured.RequestURI)

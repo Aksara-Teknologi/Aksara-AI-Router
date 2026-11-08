@@ -61,15 +61,24 @@ const (
 // listed here, the vendor's official API-key form as the gateway token and
 // rewrites it into the Bearer form TokenAuth reads: Vidu's
 // "Authorization: Token <key>", and the Gemini API's "x-goog-api-key: <key>"
-// or "?key=<key>". A header the client already sent as Authorization wins.
+// or "?key=<key>"; the Antigravity personal provider accepts the Gemini forms,
+// and the Claude personal provider accepts "x-api-key". Authorization wins.
 // "?key=" is taken out of the URL in every case, so decoders, the stored
 // request path and later handlers never see it. Every other plugin's routes
 // accept the Bearer form only. pluginKeys are the plugins serving the route.
 func NativeRouteCredential(pluginKeys ...string) gin.HandlerFunc {
 	viduToken := slices.Contains(pluginKeys, "vidu")
-	googleKey := slices.Contains(pluginKeys, "google")
+	googleKey := slices.Contains(pluginKeys, "google") || slices.Contains(pluginKeys, "antigravity-oauth")
+	claudeKey := slices.Contains(pluginKeys, "claude-oauth")
 	return func(c *gin.Context) {
 		header := c.Request.Header
+		if claudeKey {
+			key := header.Get("X-Api-Key")
+			header.Del("X-Api-Key")
+			if header.Get("Authorization") == "" && key != "" {
+				header.Set("Authorization", "Bearer "+key)
+			}
+		}
 		if viduToken {
 			if scheme, token, found := strings.Cut(header.Get("Authorization"), " "); found && strings.EqualFold(scheme, "Token") {
 				header.Set("Authorization", "Bearer "+strings.TrimSpace(token))
