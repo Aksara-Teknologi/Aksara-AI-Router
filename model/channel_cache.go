@@ -216,6 +216,50 @@ func GetRandomSatisfiedChannel(
 	return nil, errors.New("channel not found")
 }
 
+// EligibleChannels returns the same filtered candidates used by random routing,
+// without choosing one. Callers must not mutate the cached channel objects.
+func EligibleChannels(group, modelName string, filters []dto.ChannelFilter) ([]*Channel, error) {
+	if common.MemoryCacheEnabled {
+		channelSyncLock.RLock()
+		defer channelSyncLock.RUnlock()
+		ids, _ := filterCandidateIDs(group2model2channels[group][modelName], modelName, filters)
+		if len(ids) == 0 {
+			ids, _ = filterCandidateIDs(group2model2channels[group][ratio_setting.RoutingMatchModelName(modelName)], modelName, filters)
+		}
+		channels := make([]*Channel, 0, len(ids))
+		for _, id := range ids {
+			if channel := channelsIDM[id]; channel != nil {
+				channels = append(channels, channel)
+			}
+		}
+		return channels, nil
+	}
+	var abilities []Ability
+	query := DB.Where(map[string]any{"group": group, "model": modelName, "enabled": true})
+	if err := query.Find(&abilities).Error; err != nil {
+		return nil, err
+	}
+	abilities = filterAbilitiesByConstraints(abilities, modelName, filters)
+	if len(abilities) == 0 {
+		if err := DB.Where(map[string]any{"group": group, "model": ratio_setting.RoutingMatchModelName(modelName), "enabled": true}).Find(&abilities).Error; err != nil {
+			return nil, err
+		}
+		abilities = filterAbilitiesByConstraints(abilities, modelName, filters)
+	}
+	ids := make([]int, 0, len(abilities))
+	for _, ability := range abilities {
+		ids = append(ids, ability.ChannelId)
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var channels []*Channel
+	if err := DB.Where("id IN ? AND status = ?", ids, common.ChannelStatusEnabled).Find(&channels).Error; err != nil {
+		return nil, err
+	}
+	return channels, nil
+}
+
 func CacheGetChannel(id int) (*Channel, error) {
 	if !common.MemoryCacheEnabled {
 		return GetChannelById(id, true)

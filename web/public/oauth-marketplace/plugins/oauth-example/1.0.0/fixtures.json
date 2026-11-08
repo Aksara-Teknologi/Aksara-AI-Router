@@ -1,0 +1,142 @@
+{
+  "cases": [
+    {
+      "name": "submit with host-managed bearer",
+      "hook": "buildSubmitRequest",
+      "args": [
+        {
+          "baseUrl": "https://provider.example/",
+          "authHeader": "Bearer fixture",
+          "requestBody": {
+            "prompt": "test"
+          }
+        }
+      ],
+      "expected": {
+        "url": "https://provider.example/jobs",
+        "method": "POST",
+        "headers": {
+          "Authorization": "Bearer fixture",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "prompt": "test"
+        }
+      }
+    },
+    {
+      "name": "submitted job",
+      "hook": "parseSubmitResponse",
+      "args": [
+        {},
+        {
+          "statusCode": 200,
+          "body": {
+            "id": "job-1"
+          }
+        }
+      ],
+      "expected": {
+        "taskId": "job-1",
+        "taskData": {
+          "id": "job-1"
+        }
+      }
+    },
+    {
+      "name": "provider failure",
+      "hook": "parseSubmitResponse",
+      "args": [
+        {},
+        {
+          "statusCode": 401,
+          "body": {}
+        }
+      ],
+      "expectedError": "Provider job submission failed"
+    },
+    {
+      "name": "query URL encoding",
+      "hook": "buildQueryRequest",
+      "args": [
+        {
+          "baseUrl": "https://provider.example",
+          "authHeader": "Bearer fixture",
+          "taskId": "job/1"
+        }
+      ],
+      "expected": {
+        "url": "https://provider.example/jobs/job%2F1",
+        "method": "GET",
+        "headers": {
+          "Authorization": "Bearer fixture"
+        }
+      }
+    },
+    {
+      "name": "queued",
+      "hook": "parseTaskResult",
+      "args": [
+        {},
+        {
+          "status": "queued"
+        }
+      ],
+      "expected": {
+        "status": "NOT_START"
+      }
+    },
+    {
+      "name": "running",
+      "hook": "parseTaskResult",
+      "args": [
+        {},
+        {
+          "status": "running"
+        }
+      ],
+      "expected": {
+        "status": "IN_PROGRESS"
+      }
+    },
+    {
+      "name": "succeeded",
+      "hook": "parseTaskResult",
+      "args": [
+        {},
+        {
+          "status": "succeeded"
+        }
+      ],
+      "expected": {
+        "status": "SUCCESS"
+      }
+    },
+    {
+      "name": "failed",
+      "hook": "parseTaskResult",
+      "args": [
+        {},
+        {
+          "status": "failed"
+        }
+      ],
+      "expected": {
+        "status": "FAILURE"
+      }
+    },
+    {
+      "name": "unrecognized",
+      "hook": "parseTaskResult",
+      "args": [
+        {},
+        {
+          "status": "unrecognized"
+        }
+      ],
+      "expected": {
+        "status": "UNKNOWN"
+      }
+    }
+  ]
+}

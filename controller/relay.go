@@ -594,6 +594,7 @@ func executeTaskSubmissionWith(
 		}
 
 		taskAPIError := taskSubmissionAPIError(taskErr)
+		service.MarkPluginOAuthPoolFailure(c, channel.Id, taskErr.StatusCode)
 		relayInfo.LastError = taskAPIError
 		decision := decideTaskRetry(c, taskErr, common.RetryTimes-retryParam.GetRetry())
 		service.RecordPolicyFailure(c, channel.Id, taskAPIError, decision)

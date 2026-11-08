@@ -82,6 +82,7 @@ export async function getInferenceStatus(
 }
 
 export type TaskPluginOption = {
+  authType?: string
   sortPriority?: number
   website?: string
   key: string

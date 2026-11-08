@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
+	"github.com/QuantumNous/new-api/pkg/pluginoauth"
 	relaychannel "github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/ollama"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -550,6 +551,16 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 		if !ok {
 			return fmt.Errorf("task plugin %q is not registered", pluginKey)
 		}
+		if plugin.Meta.Auth.Type == "oauth2_pkce" {
+			if channel.ChannelInfo.IsMultiKey {
+				return fmt.Errorf("plugin OAuth requires a single-account channel")
+			}
+			if isAdd {
+				channel.Key = pluginoauth.PendingKey
+			} else if channel.Key != "" {
+				return fmt.Errorf("plugin OAuth credentials must be managed through the connection endpoints")
+			}
+		}
 		if channel.BaseURL == nil || strings.TrimSpace(*channel.BaseURL) == "" {
 			// The plugin default is persisted onto the channel instead of being
 			// resolved per request, so the destination host stays an auditable
@@ -770,6 +781,10 @@ func AddChannel(c *gin.Context) {
 	}
 
 	addChannelRequest.Channel.CreatedTime = common.GetTimestamp()
+	if addChannelRequest.Channel.Key == pluginoauth.PendingKey && addChannelRequest.Mode != "single" {
+		common.ApiErrorT(c, "Plugin OAuth requires a single-account channel")
+		return
+	}
 	keys := make([]string, 0)
 	inputIndices := make([]int, 0)
 	switch addChannelRequest.Mode {
@@ -1610,6 +1625,9 @@ func CopyChannel(c *gin.Context) {
 	// clone channel
 	clone := *origin // shallow copy is sufficient as we will overwrite primitives
 	clone.Id = 0     // let DB auto-generate
+	if pluginoauth.IsManagedKey(clone.Key) {
+		clone.Key = pluginoauth.PendingKey
+	}
 	clone.CreatedTime = common.GetTimestamp()
 	clone.Name = origin.Name + suffix
 	clone.TestTime = 0

@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/textproto"
 	"net/url"
+	"os"
 	"reflect"
 	"regexp"
 	"slices"
@@ -37,6 +38,7 @@ import (
 )
 
 type requestDescriptor struct {
+	BufferStream   bool              `json:"bufferStream"`
 	ResponseType   string            `json:"responseType"`
 	URL            string            `json:"url"`
 	Method         string            `json:"method"`
@@ -58,10 +60,13 @@ type requestDescriptor struct {
 	BodyText json.RawMessage `json:"-"`
 }
 
+var errPluginOAuthUnavailable = errors.New("Provider OAuth account is unavailable. Reconnect this channel account.")
+
 // orderedRequestDescriptor is requestDescriptor as a plugin that preserves
 // JSON order returns it: decoded from the JSON.stringify text of the result,
 // with the body kept as that text.
 type orderedRequestDescriptor struct {
+	BufferStream   bool              `json:"bufferStream"`
 	ResponseType   string            `json:"responseType"`
 	URL            string            `json:"url"`
 	Method         string            `json:"method"`
@@ -227,6 +232,11 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 		}
 	}
 	if _, err := a.buildSubmit(c, info); err != nil {
+		if errors.Is(err, errPluginOAuthUnavailable) {
+			// Channel credentials failed before provider work began. Let the
+			// existing retry policy select another account in the same pool.
+			return service.TaskErrorWrapper(err, "plugin_oauth_unavailable", http.StatusServiceUnavailable)
+		}
 		// utils.fetch failures in the build hook name the host fetched: the
 		// channel base URL or one of the plugin's allowed hosts, which an
 		// installed plugin may point at private hosts.
@@ -562,7 +572,7 @@ func (a *TaskAdaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, bod
 	// idle timeout, so the upstream request is bounded by the submission
 	// deadline of the host protocols (TASK_PLUGIN_PROTOCOL_TIMEOUT_SECONDS).
 	var release context.CancelFunc
-	if a.submit != nil && a.submit.ResponseType == "sse" && relaysSubmitEvents(c) {
+	if a.submit != nil && a.submit.ResponseType == "sse" && !a.submit.BufferStream && relaysSubmitEvents(c) {
 		detached := c.Request.WithContext(context.WithoutCancel(c.Request.Context()))
 		timeout := time.Duration(constant.TaskPluginProtocolTimeoutSeconds) * time.Second
 		if timeout <= 0 {
@@ -655,7 +665,7 @@ func (a *TaskAdaptor) ParseResponse(c *gin.Context, resp *http.Response, info *r
 		// upstream may already have performed billable work.
 		defer resp.Body.Close()
 		var client *gin.Context
-		if relaysSubmitEvents(c) {
+		if !a.submit.BufferStream && relaysSubmitEvents(c) {
 			client = c
 		}
 		var stopped bool
@@ -1492,6 +1502,23 @@ func (a *TaskAdaptor) applyUpstreamCredentials(ctx map[string]any, channelType i
 		return nil
 	}
 	ctx["upstream"] = map[string]any{"kind": pluginruntime.UpstreamKindVendor}
+	if a.plugin.Meta.Auth.Type == "oauth2_pkce" {
+		if a.info == nil {
+			return fmt.Errorf("plugin OAuth requires channel metadata")
+		}
+		token, err := service.ResolvePluginOAuthToken(context.Background(), a.info.GetChannelID(), a.plugin.Meta.Key)
+		if err != nil {
+			return err
+		}
+		ctx["auth"] = map[string]any{"authHeader": "Bearer " + token}
+		ctx["authHeader"] = "Bearer " + token
+		routing, err := service.PluginOAuthRouting(a.info.GetChannelID(), a.plugin.Meta.Key, token)
+		if err != nil {
+			return err
+		}
+		ctx["oauth"] = routing
+		return nil
+	}
 	auth, err := resolveAuth(a.plugin.Meta.Auth, key, proxy)
 	if err != nil {
 		return err
@@ -1605,6 +1632,7 @@ func (a *TaskAdaptor) requestDescriptor(ctx context.Context, hook string, args .
 		return requestDescriptor{}, err
 	}
 	descriptor := requestDescriptor{
+		BufferStream: ordered.BufferStream,
 		ResponseType: ordered.ResponseType, URL: ordered.URL, Method: ordered.Method, Headers: ordered.Headers,
 		Credentialless: ordered.Credentialless, Action: ordered.Action, Model: ordered.Model,
 		RewriteModel: ordered.RewriteModel, BodyType: ordered.BodyType, Parts: ordered.Parts,
@@ -1636,7 +1664,11 @@ func (a *TaskAdaptor) buildSubmit(c *gin.Context, info *relaycommon.RelayInfo) (
 	if info.HasChannelMeta() {
 		fetchContext = pluginruntime.WithFetcher(fetchContext, a.hookFetcher(info.ChannelBaseUrl, info.ChannelSetting.Proxy))
 	}
-	descriptor, err := a.requestDescriptor(fetchContext, "buildSubmitRequest", a.submitContext(c, info))
+	driverContext := a.submitContext(c, info)
+	if a.plugin.Meta.Auth.Type == "oauth2_pkce" && driverContext["authError"] != nil {
+		return nil, errPluginOAuthUnavailable
+	}
+	descriptor, err := a.requestDescriptor(fetchContext, "buildSubmitRequest", driverContext)
 	if err != nil {
 		reason := "hook_failed"
 		var invalid *pluginruntime.ResultError
@@ -1654,6 +1686,9 @@ func (a *TaskAdaptor) buildSubmit(c *gin.Context, info *relaycommon.RelayInfo) (
 	}
 	if descriptor.ResponseType == "" {
 		descriptor.ResponseType = "json"
+	}
+	if descriptor.BufferStream && (!slices.Contains(a.plugin.Meta.RequiredCapabilities, pluginruntime.CapabilitySubmitSSERender) || descriptor.ResponseType != "sse") {
+		return nil, fmt.Errorf("bufferStream requires SSE and submit-sse-render@1")
 	}
 	allowed := a.plugin.Meta.SubmitResponseTypes
 	if len(allowed) == 0 {
@@ -1820,6 +1855,10 @@ func (a *TaskAdaptor) submitContext(c *gin.Context, info *relaycommon.RelayInfo)
 		ctx["originTasks"] = originTasks
 	}
 	ctx["publicTaskId"] = info.PublicTaskID
+	ctx["autoPromptCache"] = os.Getenv("PLUGIN_OAUTH_AUTO_CACHE") != "false"
+	if c != nil {
+		ctx["agentSessionKey"] = c.GetString(service.OAuthPoolSessionKey)
+	}
 	ctx["model"] = info.OriginModelName
 	ctx["upstreamModel"] = info.UpstreamModelName
 	ctx["baseUrl"] = info.ChannelBaseUrl

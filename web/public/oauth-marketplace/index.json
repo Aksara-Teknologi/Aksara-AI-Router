@@ -1,0 +1,83 @@
+{
+  "indexVersion": 1,
+  "name": "Aksara OAuth Providers",
+  "plugins": [
+    {
+      "key": "codex-oauth",
+      "name": "Codex OAuth",
+      "description": "ChatGPT subscription via Codex OAuth. Responses API, streaming and synchronous replies.",
+      "models": [
+        "gpt-6.1-sol",
+        "gpt-6.1-terra",
+        "gpt-6-astra",
+        "gpt-6-sol",
+        "gpt-6-luna",
+        "gpt-daybreak-blue-latest",
+        "gpt-reserve",
+        "codex-auto-review"
+      ],
+      "latest": "1.0.0",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "path": "plugins/codex-oauth/1.0.0/plugin.js",
+          "sha256": "378092a20d621abaef735914f90c27aa7f1a28426bccdb01cfb56e8e5cf4dbe7",
+          "minApiVersion": 1,
+          "auth": "oauth2_pkce"
+        }
+      ]
+    },
+    {
+      "key": "claude-oauth",
+      "name": "Claude OAuth",
+      "description": "Claude subscription OAuth with the native Messages API, including streaming.",
+      "models": [
+        "claude-opus-5-5",
+        "claude-opus-5",
+        "claude-fable-5-1",
+        "claude-fable-5",
+        "claude-sonnet-5-5",
+        "claude-sonnet-5",
+        "claude-haiku-4-5-20251001"
+      ],
+      "latest": "1.0.0",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "path": "plugins/claude-oauth/1.0.0/plugin.js",
+          "sha256": "1e9e0f5ddc0723ba486fe2b6a5dc8d964246f7f8b270ad4f8a5104122dbfce6d",
+          "minApiVersion": 1,
+          "auth": "oauth2_pkce"
+        }
+      ]
+    },
+    {
+      "key": "antigravity-oauth",
+      "name": "Antigravity OAuth",
+      "description": "Google Antigravity OAuth with Gemini generateContent and streamGenerateContent.",
+      "models": [
+        "gemini-4-argon-high",
+        "gemini-4-argon-medium",
+        "gemini-4-argon-low",
+        "gemini-3.8-flash",
+        "gemini-3.7-flash-high",
+        "gemini-pro-agent",
+        "claude-sonnet-5-5",
+        "claude-opus-5-5",
+        "claude-sonnet-4-6",
+        "claude-opus-4-6-thinking",
+        "gpt-oss-120b-medium"
+      ],
+      "latest": "1.0.0",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "path": "plugins/antigravity-oauth/1.0.0/plugin.js",
+          "sha256": "225cee21dfcbc72b3ce28fcb12fa7c50c184d2402818958caa3911b889364bfd",
+          "minApiVersion": 1,
+          "auth": "oauth2_pkce"
+        }
+      ]
+    }
+  ]
+}

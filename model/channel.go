@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
@@ -357,6 +358,33 @@ func (channel *Channel) GetAutoBan() bool {
 
 func (channel *Channel) Save() error {
 	return DB.Save(channel).Error
+}
+
+// UpdateChannelCredential serializes refresh-token rotation across nodes. The
+// first statement is a write so SQLite never has to upgrade a deferred read lock.
+func UpdateChannelCredential(ctx context.Context, id int, identity *AuthSessionIdentity, update func(*Channel) (string, error)) error {
+	return DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&Channel{}).Where("id = ?", id).Update("key", gorm.Expr("?", clause.Column{Name: "key"})).Error; err != nil {
+			return err
+		}
+		if identity != nil {
+			if err := ValidateAuthSessionWithTx(tx, *identity); err != nil {
+				return err
+			}
+		}
+		var channel Channel
+		if err := tx.First(&channel, id).Error; err != nil {
+			return err
+		}
+		key, err := update(&channel)
+		if err != nil {
+			return err
+		}
+		if key == channel.Key {
+			return nil
+		}
+		return tx.Model(&Channel{}).Where("id = ?", id).Update("key", key).Error
+	})
 }
 
 // saveStatusState persists only the fields owned by the channel status flow.

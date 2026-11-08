@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"mime"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -54,6 +55,7 @@ func (a *TaskAdaptor) readSubmitEvents(parent context.Context, resp *http.Respon
 
 	scanner := helper.NewStreamScanner(resp.Body, int(stream.frameLimit)+1)
 	hook := "parseSubmitEvent"
+	renderEvents := slices.Contains(a.plugin.Meta.RequiredCapabilities, pluginruntime.CapabilitySubmitSSERender)
 	var accumulated *pluginruntime.JSONState
 	if pluginruntime.UsesSubmitEventDelta(a.plugin.Meta, a.plugin.Engine) {
 		hook = "parseSubmitEventDelta"
@@ -102,11 +104,11 @@ func (a *TaskAdaptor) readSubmitEvents(parent context.Context, resp *http.Respon
 			continue
 		}
 		frameBytes = 0
-		if stream.client != nil {
+		if stream.client != nil && (!renderEvents || len(data) == 0) {
 			relaySubmitEvent(stream.client, frame.String())
-			frame.Reset()
 			relayed = true
 		}
+		frame.Reset()
 		if len(data) == 0 {
 			eventName = ""
 			continue
@@ -130,6 +132,29 @@ func (a *TaskAdaptor) readSubmitEvents(parent context.Context, resp *http.Respon
 		if !hasState || !hasDone {
 			readErr = fmt.Errorf("%s must return state and a boolean done", hook)
 			break
+		}
+		if renderEvents && stream.client != nil {
+			clientEvent, ok := result["clientEvent"].(map[string]any)
+			text, textOK := clientEvent["data"].(string)
+			name, _ := clientEvent["event"].(string)
+			if !ok || !textOK || strings.ContainsAny(name, "\r\n\x00") || len(name) > 128 {
+				readErr = fmt.Errorf("parseSubmitEvent must return a valid clientEvent")
+				break
+			}
+			var output strings.Builder
+			if name != "" {
+				output.WriteString("event: " + name + "\n")
+			}
+			for line := range strings.SplitSeq(text, "\n") {
+				output.WriteString("data: " + line + "\n")
+			}
+			output.WriteByte('\n')
+			if int64(output.Len()) > stream.frameLimit {
+				readErr = fmt.Errorf("rendered submit SSE event exceeds size limit")
+				break
+			}
+			relaySubmitEvent(stream.client, output.String())
+			relayed = true
 		}
 		encoded, err := common.Marshal(nextState)
 		if err != nil {

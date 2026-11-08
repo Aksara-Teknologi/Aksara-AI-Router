@@ -1,3 +1,7 @@
+> **Aksara AI Router** is a fork of [QuantumNous/new-api](https://github.com/QuantumNous/new-api), maintained in [Aksara-Teknologi/Aksara-AI-Router](https://github.com/Aksara-Teknologi/Aksara-AI-Router).
+> It adds subscription OAuth provider plugins, session-aware account pools, and an Android/Termux personal-server profile. Upstream branding, copyright notices, and AGPL-3.0 licensing are retained.
+> Start here: [Termux setup and multi-agent routing](docs/aksara-termux.md) · [Fork changes and validation](docs/aksara-fork.md).
+
 <div align="center">
 
 ![new-api](/web/public/logo.png)

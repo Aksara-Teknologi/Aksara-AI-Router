@@ -48,6 +48,14 @@ func registerChannelRoutes(apiRouter *gin.RouterGroup) {
 		middleware.SecureVerificationRequired(),
 		controller.GetChannelKey,
 	)
+	handlePermissionRoute(channelRoute, http.MethodGet, "/:id/plugin-oauth", authz.ChannelRead,
+		middleware.DisableCache(), controller.GetPluginOAuthStatus)
+	handlePermissionRoute(channelRoute, http.MethodPost, "/:id/plugin-oauth/start", authz.ChannelSensitiveWrite,
+		middleware.CriticalRateLimit(), middleware.UserCriticalRateLimit("plugin-oauth"), middleware.DisableCache(), controller.StartPluginOAuth)
+	handlePermissionRoute(channelRoute, http.MethodPost, "/plugin-oauth/finish", authz.ChannelSensitiveWrite,
+		middleware.CriticalRateLimit(), middleware.UserCriticalRateLimit("plugin-oauth"), middleware.DisableCache(), controller.FinishPluginOAuth)
+	handlePermissionRoute(channelRoute, http.MethodDelete, "/:id/plugin-oauth", authz.ChannelSensitiveWrite,
+		middleware.CriticalRateLimit(), middleware.UserCriticalRateLimit("plugin-oauth"), middleware.DisableCache(), controller.DisconnectPluginOAuth)
 
 	for _, route := range channelPermissionRoutes {
 		handlePermissionRoute(channelRoute, route.method, route.path, route.permission, route.handler)

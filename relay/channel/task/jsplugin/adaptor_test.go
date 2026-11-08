@@ -2160,6 +2160,31 @@ export function extractUsageOnComplete(ctx,result,body){
 }
 `
 
+func TestSubmitStreamRenderedEvents(t *testing.T) {
+	for _, invalidName := range []bool{false, true} {
+		source := strings.Replace(documentStreamPlugin, `submitResponseTypes:["json","sse"],`, `submitResponseTypes:["json","sse"],requiredCapabilities:["submit-sse-render@1"],`, 1)
+		name := "message"
+		if invalidName {
+			name = "bad\\nevent"
+		}
+		source = strings.Replace(source, `return {state:state,done:chunk.complete === true};`, `return {state:state,done:chunk.complete === true,clientEvent:{event:"`+name+`",data:JSON.stringify({text:chunk.part})}};`, 1)
+		plugin, err := pluginruntime.CompilePlugin(source, pluginruntime.Options{})
+		require.NoError(t, err)
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		response := &http.Response{Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader("data: {\"part\":\"visible\",\"complete\":true,\"control\":\"hidden\"}\n\n"))}
+		_, _, err = New(plugin).readSubmitEvents(t.Context(), response, nil, submitEventStream{client: c, frameLimit: maxTaskPluginPersistedJSONBytes})
+		if invalidName {
+			require.Error(t, err)
+			require.Empty(t, recorder.Body.String())
+			continue
+		}
+		require.NoError(t, err)
+		require.Equal(t, "event: message\ndata: {\"text\":\"visible\"}\n\n", recorder.Body.String())
+		require.NotContains(t, recorder.Body.String(), "control")
+	}
+}
+
 func TestTaskSubmitStreamContract(t *testing.T) {
 	plugin, err := pluginruntime.CompilePlugin(documentStreamPlugin, pluginruntime.Options{})
 	require.NoError(t, err)

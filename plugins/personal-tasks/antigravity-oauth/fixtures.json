@@ -1,0 +1,72 @@
+{
+  "cases": [
+    {
+      "name": "no asynchronous polling",
+      "hook": "buildQueryRequest",
+      "args": [],
+      "expectedError": "cannot be retrieved"
+    },
+    {
+      "name": "provider failure is terminal",
+      "hook": "parseSubmitResponse",
+      "args": [
+        {
+          "publicTaskId": "task-test",
+          "authHeader": "Bearer test-access",
+          "oauth": {
+            "accountId": "account-test",
+            "projectId": "project-test"
+          }
+        },
+        {
+          "statusCode": 200,
+          "body": {
+            "error": true
+          }
+        }
+      ],
+      "expected": {
+        "taskId": "task-test",
+        "taskData": {
+          "error": true
+        },
+        "immediate": {
+          "status": "FAILURE",
+          "reason": "Antigravity generation failed",
+          "completionTokens": 0,
+          "totalTokens": 0
+        }
+      }
+    },
+    {
+      "name": "terminal Gemini stream is unwrapped",
+      "hook": "parseSubmitEvent",
+      "args": [
+        {
+          "publicTaskId": "task-test",
+          "authHeader": "Bearer test-access",
+          "oauth": {
+            "accountId": "account-test",
+            "projectId": "project-test"
+          }
+        },
+        {
+          "data": "{\"response\":{\"candidates\":[{\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"totalTokenCount\":7}}}"
+        },
+        null
+      ],
+      "expected": {
+        "state": {
+          "usageMetadata": {
+            "totalTokenCount": 7
+          },
+          "error": false
+        },
+        "done": true,
+        "clientEvent": {
+          "data": "{\"candidates\":[{\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"totalTokenCount\":7}}"
+        }
+      }
+    }
+  ]
+}

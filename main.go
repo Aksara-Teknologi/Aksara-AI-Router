@@ -6,6 +6,7 @@ import (
 	"embed"
 	"errors"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -25,6 +26,7 @@ import (
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 	"github.com/QuantumNous/new-api/pkg/wsmanager"
+	"github.com/QuantumNous/new-api/plugins"
 	"github.com/QuantumNous/new-api/relay"
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"github.com/QuantumNous/new-api/router"
@@ -63,6 +65,18 @@ func main() {
 	}
 
 	common.SysLog(common.LogText("New API %s started", common.Version))
+	if os.Getenv("AKSARA_PERSONAL_PROFILE") == "true" {
+		if err := plugins.RegisterPersonalOAuthProviders(); err != nil {
+			common.FatalLog("Personal OAuth provider registration failed: " + err.Error())
+			return
+		}
+	}
+	if err := service.BootstrapAksaraPersonalProfile(); err != nil {
+		common.FatalLog("Aksara personal profile initialization failed: " + err.Error())
+		return
+	}
+	stopOAuthCallbacks := service.StartPluginOAuthLoopbackCallbacks()
+	defer stopOAuthCallbacks()
 	if os.Getenv("GIN_MODE") != "debug" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -203,7 +217,7 @@ func main() {
 	}
 
 	srv := &http.Server{
-		Addr:    ":" + port,
+		Addr:    net.JoinHostPort(os.Getenv("BIND_ADDRESS"), port),
 		Handler: server,
 	}
 

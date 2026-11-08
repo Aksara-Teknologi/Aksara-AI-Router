@@ -9,7 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 )
 
-//go:embed tasks
+//go:embed tasks personal-tasks
 var taskPlugins embed.FS
 
 func init() {
@@ -37,9 +37,28 @@ func init() {
 	}
 }
 
+// RegisterPersonalOAuthProviders is opt-in after deployment configuration is
+// loaded, so stock deployments keep their ordinary model/pricing ownership.
+func RegisterPersonalOAuthProviders() error {
+	for _, key := range []string{"codex-oauth", "claude-oauth", "antigravity-oauth"} {
+		source, err := Source(key)
+		if err != nil {
+			return err
+		}
+		if _, err := jsplugin.DefaultRegistry.RegisterFactory(source, jsplugin.Options{Key: key}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Source returns the embedded factory source for a task plugin key.
 func Source(key string) (string, error) {
-	source, err := taskPlugins.ReadFile("tasks/" + key + "/plugin.js")
+	directory := "tasks/"
+	if key == "codex-oauth" || key == "claude-oauth" || key == "antigravity-oauth" {
+		directory = "personal-tasks/"
+	}
+	source, err := taskPlugins.ReadFile(directory + key + "/plugin.js")
 	if err != nil {
 		return "", err
 	}

@@ -112,6 +112,12 @@ func (p *RetryParam) ResetRetryNextTry() {
 //	Retry=3: GroupB, priority1 (startRetryIndex=2, priorityRetry=1)
 //	         分组B, 优先级1
 func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, error) {
+	if channel, group, selectionError, handled := selectPluginOAuthPoolChannel(param.Ctx, param.ModelName, param); handled {
+		if selectionError != nil {
+			return nil, group, errors.New(selectionError.Message)
+		}
+		return channel, group, nil
+	}
 	var channel *model.Channel
 	var err error
 	selectGroup := param.TokenGroup
@@ -323,10 +329,16 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 				FilterKind: kind, Channel: channel,
 			}
 		}
+		if pooled, group, selectionError, handled := selectPluginOAuthPoolChannel(c, modelName, retry); handled {
+			return pooled, group, selectionError
+		}
 		return channel, "", nil
 	}
 
 	usingGroup := retry.TokenGroup
+	if channel, group, selectionError, handled := selectPluginOAuthPoolChannel(c, modelName, retry); handled {
+		return channel, group, selectionError
+	}
 	var channel *model.Channel
 	var selectGroup string
 	if retry.GetRetry() == 0 {

@@ -53,6 +53,22 @@ func TestChannelStatusRoutesRegisterWithoutConflict(t *testing.T) {
 	})
 }
 
+func TestPluginOAuthRoutesRequireAuthentication(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	registerChannelRoutes(engine.Group("/api"))
+	for _, route := range []struct{ method, path string }{
+		{http.MethodGet, "/api/channel/1/plugin-oauth"},
+		{http.MethodPost, "/api/channel/1/plugin-oauth/start"},
+		{http.MethodPost, "/api/channel/plugin-oauth/finish"},
+		{http.MethodDelete, "/api/channel/1/plugin-oauth"},
+	} {
+		recorder := httptest.NewRecorder()
+		engine.ServeHTTP(recorder, httptest.NewRequest(route.method, route.path, nil))
+		require.Equal(t, http.StatusUnauthorized, recorder.Code, route.path)
+	}
+}
+
 func assertChannelRoutePermission(t *testing.T, method string, path string, permission authz.Permission, handler any) {
 	t.Helper()
 	for _, route := range channelPermissionRoutes {

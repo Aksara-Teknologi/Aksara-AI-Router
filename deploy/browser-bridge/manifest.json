@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "New API OAuth Callback Bridge",
+  "description": "Return an explicitly started New API provider login from a native localhost callback to the initiating New API host.",
+  "version": "1.0.0",
+  "permissions": ["activeTab", "scripting", "storage", "webNavigation"],
+  "host_permissions": ["http://localhost/*"],
+  "action": {"default_title": "Enable OAuth callback bridge on this New API tab"},
+  "background": {"service_worker": "background.js"}
+}

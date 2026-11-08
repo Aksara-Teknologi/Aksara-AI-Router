@@ -65,6 +65,41 @@ func TestValidateV1MetaEnforcesTaskPluginKeyLength(t *testing.T) {
 	require.ErrorContains(t, ValidateV1Meta(meta), "must not exceed 30 characters")
 }
 
+func TestRegistryOAuthPKCEContract(t *testing.T) {
+	metadata := `requiredCapabilities:["oauth2-pkce@1"],auth:{type:"oauth2_pkce",oauth:{authorizationUrl:"https://auth.example/authorize",tokenUrl:"https://auth.example/token",clientId:"public-client",scopes:["inference"]}},`
+	source := routingTestPluginSource("oauth-contract", 0, `["model"]`, metadata, "")
+	plugin, err := NewRegistry().Register(source, Options{})
+	require.NoError(t, err)
+	require.Equal(t, "oauth2_pkce", plugin.Meta.Auth.Type)
+	require.Equal(t, "public-client", plugin.Meta.Auth.OAuth.ClientID)
+	for _, invalid := range []string{
+		strings.Replace(source, `requiredCapabilities:["oauth2-pkce@1"],`, "", 1),
+		strings.Replace(source, `https://auth.example/token`, `http://auth.example/token`, 1),
+		strings.Replace(source, `clientId:"public-client"`, `clientId:"public-client",clientSecret:"forbidden"`, 1),
+		strings.Replace(source, `scopes:["inference"]`, `scopes:["inference"],authorizationParams:{state:"forbidden"}`, 1),
+	} {
+		_, err := NewRegistry().Register(invalid, Options{})
+		require.Error(t, err)
+	}
+	registry := NewRegistry()
+	_, err = registry.Register(source, Options{})
+	require.NoError(t, err)
+	snapshot := registry.Snapshot()
+	snapshot.Override[0].Auth.OAuth.Scopes[0] = "mutated"
+	current, ok := registry.Get("oauth-contract")
+	require.True(t, ok)
+	require.Equal(t, "inference", current.Meta.Auth.OAuth.Scopes[0])
+	for _, provider := range []string{"codex", "claude", "antigravity"} {
+		preset := `requiredCapabilities:["oauth2-pkce@1"],auth:{type:"oauth2_pkce",oauth:{provider:"` + provider + `"}},`
+		loaded, err := CompilePlugin(routingTestPluginSource("preset", 0, `["model"]`, preset, ""), Options{})
+		require.NoError(t, err)
+		require.Equal(t, provider, loaded.Meta.Auth.OAuth.Provider)
+		require.NoError(t, loaded.Meta.Auth.OAuth.Validate())
+		_, err = CompilePlugin(routingTestPluginSource("preset", 0, `["model"]`, strings.Replace(preset, `provider:"`+provider+`"`, `provider:"`+provider+`",tokenUrl:"https://attacker.example/token"`, 1), ""), Options{})
+		require.ErrorContains(t, err, "cannot override")
+	}
+}
+
 func TestRegistryDecodesAndValidatesIcon(t *testing.T) {
 	absent, err := CompilePlugin(routingTestPluginSource("icon-absent", 0, `["model"]`, "", ""), Options{})
 	require.NoError(t, err)

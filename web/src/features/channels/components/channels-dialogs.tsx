@@ -26,6 +26,7 @@ import { FetchModelsDialog } from './dialogs/fetch-models-dialog'
 import { InferenceStatusDialog } from './dialogs/inference-status-dialog'
 import { MultiKeyManageDialog } from './dialogs/multi-key-manage-dialog'
 import { OllamaModelsDialog } from './dialogs/ollama-models-dialog'
+import { PluginOAuthDialog } from './dialogs/plugin-oauth-dialog'
 import { TagBatchEditDialog } from './dialogs/tag-batch-edit-dialog'
 import { UpstreamUpdateDialog } from './dialogs/upstream-update-dialog'
 import { ChannelMutateDrawer } from './drawers/channel-mutate-drawer'
@@ -35,6 +36,14 @@ export function ChannelsDialogs() {
 
   return (
     <>
+      {open === 'plugin-oauth' && currentRow && (
+        <PluginOAuthDialog
+          key={currentRow.id}
+          channelId={currentRow.id}
+          channelName={currentRow.name}
+          onClose={() => setOpen(null)}
+        />
+      )}
       {open === 'inference-status' &&
         currentRow &&
         [CHANNEL_TYPE_VLLM, CHANNEL_TYPE_SGLANG].includes(currentRow.type) && (

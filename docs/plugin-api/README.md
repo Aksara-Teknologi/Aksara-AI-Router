@@ -111,6 +111,13 @@ therefore never contact an upstream service.
 
 ## Upload and release
 
+Plugins declaring `auth: {type: "oauth2_pkce", oauth: {...}}` and the
+`oauth2-pkce@1` capability use the host's Provider OAuth account dialog on a
+single-account Task Plugin channel. The host performs PKCE, token exchange,
+encrypted credential storage, and refresh; JavaScript receives only the access
+token through `ctx.authHeader`. See [OAuth connections](v1.md#oauth-connections)
+for the contract, server configuration, and callback requirements.
+
 Upload from the root-only task plugin page or `POST /api/plugin/task` with
 `{"source":"...","remark":"..."}`. The server compiles the module, validates
 v1 metadata and required exports, and rejects invalid source before saving it.

@@ -1,0 +1,76 @@
+{
+  "cases": [
+    {
+      "name": "no asynchronous polling",
+      "hook": "buildQueryRequest",
+      "args": [],
+      "expectedError": "cannot be retrieved"
+    },
+    {
+      "name": "provider failure is terminal",
+      "hook": "parseSubmitResponse",
+      "args": [
+        {
+          "publicTaskId": "task-test",
+          "authHeader": "Bearer test-access",
+          "oauth": {
+            "accountId": "account-test",
+            "projectId": "project-test"
+          }
+        },
+        {
+          "statusCode": 200,
+          "body": {
+            "error": true
+          }
+        }
+      ],
+      "expected": {
+        "taskId": "task-test",
+        "taskData": {
+          "error": true
+        },
+        "immediate": {
+          "status": "FAILURE",
+          "reason": "Claude generation failed",
+          "completionTokens": 0,
+          "totalTokens": 0
+        }
+      }
+    },
+    {
+      "name": "terminal Messages stream",
+      "hook": "parseSubmitEvent",
+      "args": [
+        {
+          "publicTaskId": "task-test",
+          "authHeader": "Bearer test-access",
+          "oauth": {
+            "accountId": "account-test",
+            "projectId": "project-test"
+          }
+        },
+        {
+          "data": "{\"type\":\"message_stop\"}"
+        },
+        {
+          "id": "message",
+          "usage": {
+            "input_tokens": 4,
+            "output_tokens": 3
+          }
+        }
+      ],
+      "expected": {
+        "state": {
+          "id": "message",
+          "usage": {
+            "input_tokens": 4,
+            "output_tokens": 3
+          }
+        },
+        "done": true
+      }
+    }
+  ]
+}

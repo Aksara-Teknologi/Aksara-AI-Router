@@ -1,0 +1,183 @@
+# Aksara AI Router di Termux
+
+Fork New API untuk server pribadi Android ARM64, Android 8/API 26 atau lebih baru.
+Satu proses Go, SQLite lokal, frontend tertanam dalam binary. Redis, Docker, Bun,
+dan program OAuth CLI tidak diperlukan di HP.
+
+## Instalasi
+
+1. Buka **Actions → Android personal server** di repository ini. Pilih run hijau
+   pada commit yang ingin dipasang dan download artifact
+   **aksara-ai-router-android-arm64**. Ekstrak ZIP di direktori privat Termux.
+2. Di Termux:
+
+   ```sh
+   pkg update
+   pkg install openssl-tool termux-services unzip
+   cd /path/hasil-ekstrak
+   sha256sum -c SHA256SUMS
+   sh install.sh
+   ```
+
+3. Buka sesi Termux baru agar service manager aktif, kemudian:
+
+   ```sh
+   sv up aksara-ai-router
+   termux-wake-lock
+   ```
+
+4. Buka **http://localhost:3000** di browser pada HP yang sama. Selesaikan setup
+   administrator New API. Tidak ada username/password administrator bawaan dari fork.
+
+Android dapat menghentikan aplikasi di background. Izinkan Termux berjalan tanpa
+optimasi baterai. `termux-wake-lock` membantu menjaga CPU aktif tetapi bukan jaminan
+uptime Android. Installer tidak mengubah pengaturan Android atau membuka port publik.
+
+Alternatif foreground: jalankan
+`~/.local/share/aksara-ai-router/start.sh`.
+
+## Yang disiapkan otomatis
+
+Pada startup pertama dengan `AKSARA_PERSONAL_PROFILE=true`:
+
+- Tiga plugin bawaan: **Codex OAuth**, **Claude OAuth**, **Antigravity OAuth**.
+- Enam slot channel: akun **A** dan **B** untuk setiap penyedia, grup `default`,
+  priority sama, weight 100. Slot belum login tidak dipilih untuk trafik.
+- Retry budget 2. Pricing override khusus plugin bernilai **0** untuk pemakaian
+  pribadi, tanpa menghapus harga provider yang sudah dikonfigurasi. Angka nol
+  adalah kebijakan pencatatan router Anda, bukan pernyataan harga penyedia.
+- Batas satu inference aktif per akun; sesi hangat menunggu hingga 30 detik bila
+  akunnya sibuk, lalu mengembalikan 429 dengan `Retry-After: 1`.
+
+Bootstrap memakai penanda persisten dan tidak mengulang pengaturan setelah Anda
+mengubah atau menghapus channel. Ini ditujukan untuk instance pribadi baru, bukan
+mengubah konfigurasi production yang sudah ada.
+
+## Menghubungkan akun
+
+Di **Channels**, buka menu slot yang diinginkan → **Provider OAuth account** →
+**Connect provider account** → verifikasi admin → **Open provider sign-in**.
+Login di situs penyedia dan berikan persetujuan. Tidak perlu mengisi endpoint,
+access token, refresh token, atau client ID.
+
+Callback localhost berjalan pada port 1455 (Codex), 54545 (Claude), dan 51121
+(Antigravity). Bila login dilakukan di browser pada HP server yang sama, callback
+kembali otomatis ke aplikasi. Jika port dipakai aplikasi lain, listener terkait
+tidak diambil alih; gunakan cara manual atau hentikan konflik port terlebih dahulu.
+
+Jika login dari komputer lain, callback `localhost` menunjuk ke komputer itu,
+bukan HP server. Tempel URL callback lengkap ke dialog koneksi, atau gunakan
+browser bridge pada folder `deploy/browser-bridge`. Ekstensi tersebut opsional
+untuk Chrome/Edge desktop; Chrome Android tidak memerlukannya untuk login lokal.
+
+Token disimpan terenkripsi di database. Refresh dilakukan sebelum dipakai lagi dan
+diserialkan per channel. Account label dari provider tampil bila tersedia. Disconnect
+satu channel tidak memutus channel lain. Gunakan akun berbeda untuk slot A/B;
+jangan menyalin refresh token yang sama ke beberapa channel.
+
+## Dua agent dan cache
+
+Buat API key **New API** melalui console. Kirim ID percakapan stabil, berbeda
+untuk setiap agent/conversation:
+
+```http
+X-Agent-Session-Id: agent-A-conversation-123
+```
+
+```http
+X-Agent-Session-Id: agent-B-conversation-456
+```
+
+Router juga mengenali `Session_id`, `Thread_id`, `Session-Id`, `Thread-Id`,
+`prompt_cache_key`, `metadata.user_id`, atau `sessionId` bila header eksplisit
+tidak disediakan. ID tidak boleh berubah setiap request. Jika beberapa percakapan
+berbagi `metadata.user_id`, gunakan header eksplisit agar tidak dianggap satu sesi.
+
+Session key diisolasi menurut user, API key, plugin, grup, dan model, lalu dihash.
+Sesi baru memilih priority tertinggi yang memiliki kapasitas, active request paling
+sedikit, kemudian jumlah sesi terikat relatif terhadap weight. Dua agent dengan
+akun A/B yang kosong akan memakai kapasitas akun berbeda. Request lanjutan tetap
+pada akun yang sama selama tersedia. Jika semua akun sibuk, request menunggu;
+router tidak menjanjikan kapasitas melebihi jumlah akun yang terhubung.
+
+Binding diperpanjang satu jam sejak request terakhir, maksimal 10.000 sesi. Pool
+dan antrean berada dalam memori satu proses; restart mengosongkan binding. Jangan
+menjalankan beberapa proses/replica bila mengandalkan batas concurrency ini.
+Mode pool ini khusus plugin OAuth bawaan dan mendahului affinity umum New API.
+`PLUGIN_OAUTH_POOL_ENABLED=false` mengembalikan routing standar New API.
+
+Codex menerima `prompt_cache_key` stabil jika klien belum mengirimkannya.
+Antigravity menerima `sessionId` stabil. Field cache native Claude seperti
+`cache_control` tetap diteruskan dari klien. Jika klien belum menentukan cache
+di top level atau blok, plugin Claude menambahkan automatic cache ephemeral
+(TTL default penyedia, biasanya lima menit). Set `PLUGIN_OAUTH_AUTO_CACHE=false`
+untuk menonaktifkan penambahan otomatis ini. Kebijakan ini mengikuti
+[dokumentasi prompt caching Claude](https://platform.claude.com/docs/en/build-with-claude/prompt-caching).
+Pertahankan urutan system prompt,
+tools, dan riwayat pesan; letakkan data yang berubah di bagian akhir. Router tidak
+menambahkan timestamp ke prompt atau menyatukan konteks agent yang berbeda.
+
+Cache provider bergantung pada prefix, model, TTL, dan kebijakan penyedia. Affinity
+menjaga peluang hit, bukan menjamin hit atau memindahkan cache antarakun.
+Rate limit/credential failure sebelum inference dapat memindahkan sesi ke akun lain,
+dengan konsekuensi cache dingin. Akun yang menerima 429/401/403/503 diberi cooldown
+60 detik dalam pool. Setelah upstream stream diterima, inference tidak diulang.
+
+## Endpoint klien
+
+| Penyedia | Base URL | Format |
+| --- | --- | --- |
+| Codex | `http://localhost:3000/codex-oauth/v1` | Responses: `POST /responses` |
+| Claude | `http://localhost:3000/claude-oauth` | Messages: `POST /v1/messages` |
+| Antigravity | `http://localhost:3000/antigravity-oauth` | Gemini: `POST /v1beta/models/{model}:generateContent` atau `:streamGenerateContent` |
+
+Contoh request Codex dari Termux, setelah `AKSARA_API_KEY` diisi secara lokal:
+
+```sh
+curl http://localhost:3000/codex-oauth/v1/responses \
+  -H "Authorization: Bearer $AKSARA_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -H 'X-Agent-Session-Id: agent-A-conversation-123' \
+  -d '{"model":"gpt-6.1-sol","input":"Halo","stream":true}'
+```
+
+Gunakan model yang tersedia pada akun Anda. Daftar deklarasi bukan jaminan akses
+langganan. Tidak ada konversi ke Chat Completions pada fork ini. Codex memakai
+`store:false`: kirim riwayat lengkap, tanpa `previous_response_id` atau background.
+Endpoint utama New API tetap memakai relay upstream yang asli.
+
+## Operasional dan update
+
+Data privat: `~/.local/share/aksara-ai-router/`. File `.env` berisi kunci enkripsi
+dan session secret, mode 600. Binary dan start script mode 700. Jangan commit
+database atau `.env` ke Git. Backup keduanya sebagai satu pasangan. Hentikan service
+saat menyalin file SQLite untuk backup yang konsisten.
+
+```sh
+sv status aksara-ai-router
+sv down aksara-ai-router
+# Download dan verifikasi artifact baru, lalu jalankan installer lagi.
+sv up aksara-ai-router
+```
+
+Installer mempertahankan database dan kunci. Log di folder `logs` dirotasi oleh
+`svlogd`, sekitar 1 MiB per file dan lima file. Untuk mengubah concurrency, edit
+`PLUGIN_OAUTH_MAX_CONCURRENCY` dalam `.env` (1–32), kemudian restart service.
+Sesuaikan `GOMEMLIMIT` dengan RAM HP; nilai awal 256 MiB adalah soft limit Go,
+bukan batas maksimum seluruh konsumsi memori proses.
+
+Default hanya mendengarkan `127.0.0.1:3000`. Untuk klien dari komputer lain, gunakan
+reverse proxy/tunnel HTTPS menuju port ini. Callback selalu mengikuti host yang
+memulai flow. Atur cookie secure/trusted URL sesuai konfigurasi HTTPS New API.
+Tidak ada tunnel publik atau domain yang dibuat otomatis oleh installer.
+
+Build source di workstation/CI: `bun scripts/sync-oauth-marketplace.mjs`, build web,
+set `ANDROID_NDK_HOME`, kemudian `sh scripts/build-android.sh`. Bun/frontend tidak
+perlu dijalankan di Android. Artifact Android berbeda dari binary Linux ARM64.
+
+## Batas verifikasi
+
+Build native Android dapat diverifikasi di workstation, tetapi keberhasilan
+menjalankan service di perangkat Termux dan login/inference akun provider perlu
+dites pada HP dan akun Anda. Kode ini tidak menjamin bahwa kebijakan penyedia
+mengizinkan seluruh penggunaan langganan melalui aplikasi pihak ketiga.

@@ -816,6 +816,7 @@ func GetTaskPluginOptions(c *gin.Context) {
 				"icon":          meta.Icon,
 				"hasIcon":       hasIcon,
 				"baseUrl":       meta.BaseURL,
+				"authType":      meta.Auth.Type,
 				"sortPriority":  meta.SortPriority,
 				"website":       meta.Website,
 				"models":        meta.Models,

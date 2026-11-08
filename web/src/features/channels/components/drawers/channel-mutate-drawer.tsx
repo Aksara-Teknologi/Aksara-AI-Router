@@ -1607,6 +1607,10 @@ export function ChannelMutateDrawer({
   // Submit handler
   const onSubmit = useCallback(
     async (data: ChannelFormValues) => {
+      if (boundTaskPlugin?.authType === 'oauth2_pkce') {
+        data.key = isEditing ? '' : 'plugin-oauth:pending'
+        data.multi_key_mode = 'single'
+      }
       if (isEditing && !channelData?.data) return
       if (!isEditing && (!providerTarget || !canEditSensitive)) return
       // Validate key is required when creating
@@ -1732,6 +1736,7 @@ export function ChannelMutateDrawer({
       providerTarget,
       canEditSensitive,
       sensitiveLocked,
+      boundTaskPlugin,
       channelData,
       form,
       confirmMissingModelMappings,
@@ -4360,7 +4365,7 @@ export function ChannelMutateDrawer({
             )}
 
             <ChannelAuthSection>
-              {!isEditing && (
+              {!isEditing && boundTaskPlugin?.authType !== 'oauth2_pkce' && (
                 <FormField
                   control={form.control}
                   name='multi_key_mode'
@@ -4406,6 +4411,15 @@ export function ChannelMutateDrawer({
                 control={form.control}
                 name='key'
                 render={({ field }) => {
+                  if (boundTaskPlugin?.authType === 'oauth2_pkce') {
+                    return (
+                      <p className='text-muted-foreground text-sm'>
+                        {t(
+                          'Save this channel, then choose Provider OAuth account from its actions to connect. No API key is required.'
+                        )}
+                      </p>
+                    )
+                  }
                   let keyPlaceholder = t(getKeyPromptForType(currentType))
                   if (isEditing) {
                     keyPlaceholder = t('Leave empty to keep existing key')

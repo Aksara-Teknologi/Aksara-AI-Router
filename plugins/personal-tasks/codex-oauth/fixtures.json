@@ -1,0 +1,72 @@
+{
+  "cases": [
+    {
+      "name": "no asynchronous polling",
+      "hook": "buildQueryRequest",
+      "args": [],
+      "expectedError": "stateless"
+    },
+    {
+      "name": "provider failure is terminal",
+      "hook": "parseSubmitResponse",
+      "args": [
+        {
+          "publicTaskId": "task-test",
+          "authHeader": "Bearer test-access",
+          "oauth": {
+            "accountId": "account-test",
+            "projectId": "project-test"
+          }
+        },
+        {
+          "statusCode": 200,
+          "body": {
+            "status": "failed"
+          }
+        }
+      ],
+      "expected": {
+        "taskId": "task-test",
+        "taskData": {
+          "status": "failed"
+        },
+        "immediate": {
+          "status": "FAILURE",
+          "reason": "Codex generation failed",
+          "completionTokens": 0,
+          "totalTokens": 0
+        }
+      }
+    },
+    {
+      "name": "terminal Responses stream",
+      "hook": "parseSubmitEvent",
+      "args": [
+        {
+          "publicTaskId": "task-test",
+          "authHeader": "Bearer test-access",
+          "oauth": {
+            "accountId": "account-test",
+            "projectId": "project-test"
+          }
+        },
+        {
+          "event": "message",
+          "data": "{\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[]}}"
+        },
+        null
+      ],
+      "expected": {
+        "state": {
+          "status": "completed",
+          "output": []
+        },
+        "done": true,
+        "clientEvent": {
+          "event": "",
+          "data": "{\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[]}}"
+        }
+      }
+    }
+  ]
+}

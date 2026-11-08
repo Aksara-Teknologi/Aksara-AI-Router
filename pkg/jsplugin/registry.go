@@ -22,6 +22,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/pkg/pluginoauth"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 )
@@ -198,7 +199,8 @@ type AuthorMeta struct {
 }
 
 type AuthMeta struct {
-	Type string `json:"type"`
+	Type  string              `json:"type"`
+	OAuth *pluginoauth.Config `json:"oauth,omitempty"`
 }
 
 // UsageFieldSchema declares how one usage fact is validated before it can
@@ -349,6 +351,9 @@ func CompilePlugin(source string, options Options) (*LoadedPlugin, error) {
 	engine.key = meta.Key
 	engine.version = meta.Version
 	requiredHooks := []string{"buildSubmitRequest", "parseSubmitResponse", "parseTaskResult"}
+	if slices.Contains(meta.RequiredCapabilities, CapabilitySubmitSSERender) && (!slices.Contains(meta.SubmitResponseTypes, "sse") || UsesSubmitEventDelta(meta, engine)) {
+		return nil, fmt.Errorf("submit-sse-render@1 requires SSE and parseSubmitEvent")
+	}
 	if slices.Contains(meta.SubmitResponseTypes, "sse") {
 		if UsesSubmitEventDelta(meta, engine) {
 			requiredHooks = append(requiredHooks, "parseSubmitEventDelta")
@@ -881,6 +886,12 @@ func (r *Registry) Snapshot() RegistrySnapshot {
 }
 
 func cloneMeta(meta Meta) Meta {
+	if meta.Auth.OAuth != nil {
+		config := *meta.Auth.OAuth
+		config.Scopes = slices.Clone(config.Scopes)
+		config.AuthorizationParams = maps.Clone(config.AuthorizationParams)
+		meta.Auth.OAuth = &config
+	}
 	meta.SubmitResponseTypes = slices.Clone(meta.SubmitResponseTypes)
 	meta.RequiredCapabilities = slices.Clone(meta.RequiredCapabilities)
 	meta.ChannelTypes = append([]int(nil), meta.ChannelTypes...)
@@ -1168,13 +1179,39 @@ func decodeMeta(value any) (Meta, error) {
 		meta.Auth.Type = auth
 	case map[string]any:
 		for key := range auth {
-			if key != "type" {
+			if key != "type" && key != "oauth" {
 				return Meta{}, fmt.Errorf("plugin meta auth has unknown field %q", key)
 			}
 		}
 		meta.Auth.Type, err = stringMetaField(auth, "type")
 		if err != nil {
 			return Meta{}, err
+		}
+		if value, exists := auth["oauth"]; exists {
+			object, ok := value.(map[string]any)
+			if !ok {
+				return Meta{}, fmt.Errorf("plugin meta auth.oauth must be an object")
+			}
+			for key := range object {
+				switch key {
+				case "provider", "authorizationUrl", "tokenUrl", "clientId", "scopes", "redirectUri", "tokenEncoding", "authorizationParams":
+				default:
+					return Meta{}, fmt.Errorf("plugin meta auth.oauth has unknown field %q", key)
+				}
+			}
+			data, marshalErr := common.Marshal(object)
+			if marshalErr != nil || common.Unmarshal(data, &meta.Auth.OAuth) != nil {
+				return Meta{}, fmt.Errorf("plugin meta auth.oauth is invalid")
+			}
+			if meta.Auth.OAuth.Provider != "" {
+				if len(object) != 1 {
+					return Meta{}, fmt.Errorf("OAuth provider presets cannot override endpoints or client settings")
+				}
+				_, err = pluginoauth.ProviderConfig(meta.Auth.OAuth.Provider)
+				if err != nil {
+					return Meta{}, err
+				}
+			}
 		}
 	default:
 		return Meta{}, fmt.Errorf("plugin meta auth must be a string or object")
@@ -1183,7 +1220,7 @@ func decodeMeta(value any) (Meta, error) {
 	if meta.Auth.Type == "vertex_oauth" {
 		meta.Auth.Type = "oauth2_jwt"
 	}
-	if meta.Auth.Type != "" && meta.Auth.Type != "none" && meta.Auth.Type != "api_key" && meta.Auth.Type != "oauth2_jwt" {
+	if meta.Auth.Type != "" && meta.Auth.Type != "none" && meta.Auth.Type != "api_key" && meta.Auth.Type != "oauth2_jwt" && meta.Auth.Type != "oauth2_pkce" {
 		return Meta{}, fmt.Errorf("unsupported plugin auth type %q", meta.Auth.Type)
 	}
 	if meta.APIVersion != APIVersion1 {
@@ -1206,6 +1243,19 @@ func ValidateV1Meta(meta Meta) error {
 }
 
 func normalizeV1Meta(meta *Meta) error {
+	if meta.Auth.Type == "oauth2_pkce" {
+		if meta.Auth.OAuth == nil {
+			return fmt.Errorf("oauth2_pkce requires auth.oauth")
+		}
+		if err := meta.Auth.OAuth.Validate(); err != nil {
+			return err
+		}
+		if !slices.Contains(meta.RequiredCapabilities, "oauth2-pkce@1") {
+			return fmt.Errorf("oauth2_pkce requires oauth2-pkce@1")
+		}
+	} else if meta.Auth.OAuth != nil {
+		return fmt.Errorf("auth.oauth requires oauth2_pkce")
+	}
 	seenCapabilities := make(map[string]bool, len(meta.RequiredCapabilities))
 	for _, name := range meta.RequiredCapabilities {
 		if !HasCapability(name) || seenCapabilities[name] {

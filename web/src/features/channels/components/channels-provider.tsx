@@ -37,6 +37,7 @@ import type { Channel } from '../types'
 // ============================================================================
 
 type DialogType =
+  | 'plugin-oauth'
   | 'create-channel'
   | 'update-channel'
   | 'test-channel'
