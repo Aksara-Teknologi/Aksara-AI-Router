@@ -4,6 +4,10 @@ Repository ini adalah fork/derivatif dari **QuantumNous/new-api**, bukan produk
 resmi atau rilis yang didukung QuantumNous. Baseline awal:
 `dd50ee0a567b810ea60e74dcd9ea6a5786b37b91`.
 
+Source fork: https://github.com/Aksara-Teknologi/Aksara-AI-Router
+
+Source upstream: https://github.com/QuantumNous/new-api
+
 Source upstream, histori Git, nama modul, branding, lisensi AGPL-3.0, NOTICE, serta
 atribusi penulis dipertahankan. Fork ini menambahkan profil penggunaan pribadi;
 perubahan tidak dinyatakan berasal dari maintainer upstream.

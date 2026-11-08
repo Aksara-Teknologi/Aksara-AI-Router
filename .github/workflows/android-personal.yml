@@ -75,7 +75,9 @@ jobs:
         run: |
           cp deploy/termux/install.sh deploy/termux/.env.example dist/
           cp docs/aksara-termux.md dist/README.md
-          cp LICENSE NOTICE THIRD-PARTY-LICENSES.md dist/
+          cp docs/aksara-fork.md dist/FORK.md
+          cp LICENSE NOTICE THIRD-PARTY-LICENSES.md THIRD-PARTY-NOTICES-9ROUTER dist/
+          printf '{"commit":"%s","target":"android/arm64","minimum_android_api":26}\n' "$GITHUB_SHA" > dist/build-info.json
           cd dist
           sha256sum aksara-ai-router-android-arm64 > SHA256SUMS
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
