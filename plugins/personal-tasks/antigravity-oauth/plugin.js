@@ -5,7 +5,7 @@ export const meta = {
   description: { en: 'Google Antigravity OAuth with Gemini generateContent and streamGenerateContent.', zh: '通过 Google Antigravity OAuth 使用 Gemini generateContent 和 streamGenerateContent。' },
   baseUrl: 'https://daily-cloudcode-pa.googleapis.com',
   allowedHosts: ['accounts.google.com', 'oauth2.googleapis.com', 'cloudcode-pa.googleapis.com'],
-  models: ['gemini-4-argon-high', 'gemini-4-argon-medium', 'gemini-4-argon-low', 'gemini-3.8-flash', 'gemini-3.7-flash-high', 'gemini-pro-agent', 'claude-sonnet-5-5', 'claude-opus-5-5', 'claude-sonnet-4-6', 'claude-opus-4-6-thinking', 'gpt-oss-120b-medium'],
+  models: ['gemini-4-argon-high', 'gemini-4-argon-medium', 'gemini-4-argon-low', 'gemini-3.8-flash', 'gemini-3.7-flash-high', 'gemini-pro-agent', 'gpt-oss-120b-medium'],
   fetchMode: 'per_task', submitResponseTypes: ['json', 'sse'],
   requiredCapabilities: ['oauth2-pkce@1', 'submit-sse-render@1'],
   auth: { type: 'oauth2_pkce', oauth: { provider: 'antigravity' } },

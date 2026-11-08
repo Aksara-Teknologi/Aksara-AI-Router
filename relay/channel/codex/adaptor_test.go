@@ -2,6 +2,9 @@ package codex
 
 import (
 	"encoding/json"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/constant"
@@ -26,6 +29,28 @@ func TestGetRequestURLAlphaSearch(t *testing.T) {
 	url, err := adaptor.GetRequestURL(info)
 	require.NoError(t, err)
 	assert.Equal(t, "https://chatgpt.com/backend-api/codex/alpha/search", url)
+}
+
+func TestBufferCodexOAuthResponseStream(t *testing.T) {
+	response := `{"id":"resp_1","status":"completed","model":"gpt-6-luna","output":[],"usage":{"input_tokens":2,"output_tokens":1}}`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader("event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":" + response + "}\n\n")),
+	}
+	require.NoError(t, bufferCodexOAuthResponseStream(resp))
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.JSONEq(t, response, string(body))
+}
+
+func TestBufferCodexOAuthResponseStreamRequiresTerminalEvent(t *testing.T) {
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader("data: {\"type\":\"response.output_text.delta\",\"delta\":\"hi\"}\n\n")),
+	}
+	assert.ErrorContains(t, bufferCodexOAuthResponseStream(resp), "without a terminal response")
 }
 
 // The Codex backend rejects these fields, so the adaptor clears them rather

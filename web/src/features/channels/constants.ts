@@ -34,6 +34,12 @@ export const CHANNEL_TYPE_NEW_API = 60
 
 export const CHANNEL_TYPE_TASK_PLUGIN = 61
 
+export const CHANNEL_TYPE_ANTHROPIC = 14
+
+export const CHANNEL_TYPE_GEMINI = 24
+
+export const CHANNEL_TYPE_CODEX = 57
+
 export const CHANNEL_TYPE_VLLM = 62
 
 export const CHANNEL_TYPE_SGLANG = 63

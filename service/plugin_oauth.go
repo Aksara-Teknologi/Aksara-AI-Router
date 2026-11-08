@@ -66,10 +66,13 @@ func pluginOAuthKeyHash(key string) string {
 }
 
 func pluginOAuthConfig(channel *model.Channel) (*pluginoauth.Config, string, error) {
-	if channel.Type != constant.ChannelTypeTaskPlugin || channel.ChannelInfo.IsMultiKey {
+	if channel.ChannelInfo.IsMultiKey {
 		return nil, "", pluginoauth.ErrConfiguration
 	}
-	pluginKey := channel.GetSetting().TaskPluginKey
+	pluginKey := pluginOAuthChannelKey(channel)
+	if pluginKey == "" {
+		return nil, "", pluginoauth.ErrConfiguration
+	}
 	plugin, ok := jsplugin.DefaultRegistry.Get(pluginKey)
 	if !ok || plugin.Meta.Auth.Type != "oauth2_pkce" || plugin.Meta.Auth.OAuth == nil {
 		return nil, "", pluginoauth.ErrConfiguration
@@ -95,6 +98,24 @@ func pluginOAuthConfig(channel *model.Channel) (*pluginoauth.Config, string, err
 		}
 	}
 	return config, pluginKey, nil
+}
+
+func pluginOAuthChannelKey(channel *model.Channel) string {
+	if channel == nil || channel.ChannelInfo.IsMultiKey {
+		return ""
+	}
+	switch channel.Type {
+	case constant.ChannelTypeTaskPlugin:
+		return channel.GetSetting().TaskPluginKey
+	case constant.ChannelTypeCodex:
+		return "codex-oauth"
+	case constant.ChannelTypeAnthropic:
+		return "claude-oauth"
+	case constant.ChannelTypeGemini:
+		return "antigravity-oauth"
+	default:
+		return ""
+	}
 }
 
 func GetPluginOAuthStatus(channelID int) (*PluginOAuthStatus, error) {
@@ -262,7 +283,7 @@ func DisconnectPluginOAuth(ctx context.Context, identity AuthIdentity, authoriza
 		return err
 	}
 	if err := model.UpdateChannelCredential(ctx, channelID, &identity, func(channel *model.Channel) (string, error) {
-		if channel.Type != constant.ChannelTypeTaskPlugin || !pluginoauth.IsManagedKey(channel.Key) {
+		if _, _, err := pluginOAuthConfig(channel); err != nil || !pluginoauth.IsManagedKey(channel.Key) {
 			return "", pluginoauth.ErrCredential
 		}
 		return pluginoauth.NewPendingKey()
@@ -333,6 +354,24 @@ func ResolvePluginOAuthToken(ctx context.Context, channelID int, expectedPluginK
 		return pluginoauth.Seal(rotated, pluginOAuthBinding(channelID, pluginKey))
 	})
 	return accessToken, err
+}
+
+// ResolveNativeChannelOAuthToken is used by the standard relay adaptors. It
+// reports managed/pending channel credentials separately so API-key channels
+// continue through their existing authentication path.
+func ResolveNativeChannelOAuthToken(ctx context.Context, channelID int, pluginKey string) (string, bool, error) {
+	if channelID <= 0 {
+		return "", false, nil
+	}
+	channel, err := model.GetChannelById(channelID, true)
+	if err != nil {
+		return "", false, err
+	}
+	if !pluginoauth.IsManagedKey(channel.Key) && !pluginoauth.IsPendingKey(channel.Key) {
+		return "", false, nil
+	}
+	token, err := ResolvePluginOAuthToken(ctx, channelID, pluginKey)
+	return token, true, err
 }
 
 // PluginOAuthRouting exposes only routing identifiers, never refresh tokens.

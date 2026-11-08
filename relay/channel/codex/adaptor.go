@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -8,12 +9,14 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/pluginoauth"
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/openai"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -99,6 +102,21 @@ func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommo
 	if isCompact {
 		return request, nil
 	}
+	if info != nil && pluginoauth.IsManagedKey(info.ApiKey) {
+		if len(request.PromptCacheKey) == 0 && c != nil {
+			if value, exists := c.Get(service.OAuthPoolSessionKey); exists {
+				if sessionKey, ok := value.(string); ok && sessionKey != "" {
+					cacheKey, err := json.Marshal(sessionKey)
+					if err != nil {
+						return nil, err
+					}
+					request.PromptCacheKey = cacheKey
+				}
+			}
+		}
+		stream := true
+		request.Stream = &stream
+	}
 	// codex: store must be false
 	request.Store = json.RawMessage("false")
 	// rm max_output_tokens
@@ -114,6 +132,11 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.NewAPIError) {
+	if info.RelayMode == relayconstant.RelayModeResponses && !info.IsStream && pluginoauth.IsManagedKey(info.ApiKey) {
+		if err := bufferCodexOAuthResponseStream(resp); err != nil {
+			return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
+		}
+	}
 	switch info.RelayMode {
 	case relayconstant.RelayModeAlphaSearch:
 		// Alpha search responses are handled by relay.AlphaSearchHelper.
@@ -157,6 +180,32 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Header, info *rel
 	channel.SetupApiRequestHeader(info, c, req)
 
 	key := strings.TrimSpace(info.ApiKey)
+	if token, managed, err := service.ResolveNativeChannelOAuthToken(context.Background(), info.ChannelId, "codex-oauth"); managed {
+		if err != nil {
+			return err
+		}
+		routing, err := service.PluginOAuthRouting(info.ChannelId, "codex-oauth", token)
+		if err != nil {
+			return err
+		}
+		req.Set("Authorization", "Bearer "+token)
+		req.Set("chatgpt-account-id", routing["accountId"])
+		if req.Get("OpenAI-Beta") == "" {
+			req.Set("OpenAI-Beta", "responses=experimental")
+		}
+		if req.Get("originator") == "" {
+			req.Set("originator", "codex_cli_rs")
+		}
+		req.Set("Content-Type", "application/json")
+		if info.IsStream || pluginoauth.IsManagedKey(info.ApiKey) {
+			req.Set("Accept", "text/event-stream")
+		} else {
+			req.Set("Accept", "application/json")
+		}
+		return nil
+	} else if err != nil {
+		return err
+	}
 	if !strings.HasPrefix(key, "{") {
 		return errors.New("codex channel: key must be a JSON object")
 	}

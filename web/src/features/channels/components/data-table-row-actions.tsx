@@ -59,7 +59,13 @@ import {
 } from '@/lib/admin-permissions'
 import { useAuthStore } from '@/stores/auth-store'
 
-import { CHANNEL_TYPE_TASK_PLUGIN, MODEL_FETCHABLE_TYPES } from '../constants'
+import {
+  CHANNEL_TYPE_ANTHROPIC,
+  CHANNEL_TYPE_CODEX,
+  CHANNEL_TYPE_GEMINI,
+  CHANNEL_TYPE_TASK_PLUGIN,
+  MODEL_FETCHABLE_TYPES,
+} from '../constants'
 import {
   channelsQueryKeys,
   handleDeleteChannel,
@@ -263,7 +269,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           <span className='sr-only'>{t('Open menu')}</span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align='end' className='w-48'>
-          {channel.type === CHANNEL_TYPE_TASK_PLUGIN && canEditSensitive && (
+          {[CHANNEL_TYPE_TASK_PLUGIN, CHANNEL_TYPE_CODEX, CHANNEL_TYPE_ANTHROPIC, CHANNEL_TYPE_GEMINI].includes(channel.type) && canEditSensitive && (
             <DropdownMenuItem
               onClick={() => {
                 setCurrentRow(channel)

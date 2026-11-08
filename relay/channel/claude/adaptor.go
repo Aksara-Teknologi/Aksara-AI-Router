@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/QuantumNous/new-api/pkg/pluginoauth"
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -57,6 +59,9 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayIn
 	if info.UpstreamModelName == "" {
 		info.UpstreamModelName = request.Model
 	}
+	if pluginoauth.IsManagedKey(info.ApiKey) {
+		addClaudeOAuthPromptCache(request)
+	}
 	return request, nil
 }
 
@@ -93,6 +98,9 @@ func shouldAppendClaudeBetaQuery(info *relaycommon.RelayInfo) bool {
 	if info == nil {
 		return false
 	}
+	if pluginoauth.IsManagedKey(info.ApiKey) {
+		return true
+	}
 	if info.IsClaudeBetaQuery {
 		return true
 	}
@@ -115,6 +123,27 @@ func CommonClaudeHeadersOperation(c *gin.Context, req *http.Header, info *relayc
 
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Header, info *relaycommon.RelayInfo) error {
 	channel.SetupApiRequestHeader(info, c, req)
+	if token, managed, err := service.ResolveNativeChannelOAuthToken(context.Background(), info.ChannelId, "claude-oauth"); managed {
+		if err != nil {
+			return err
+		}
+		req.Del("x-api-key")
+		req.Set("Authorization", "Bearer "+token)
+		beta := strings.Join(c.Request.Header.Values("anthropic-beta"), ",")
+		if beta != "" {
+			beta += ","
+		}
+		req.Set("anthropic-beta", beta+"oauth-2025-04-20,interleaved-thinking-2025-05-14")
+		anthropicVersion := c.Request.Header.Get("anthropic-version")
+		if anthropicVersion == "" {
+			anthropicVersion = "2023-06-01"
+		}
+		req.Set("anthropic-version", anthropicVersion)
+		CommonClaudeHeadersOperation(c, req, info)
+		return nil
+	} else if err != nil {
+		return err
+	}
 	req.Set("x-api-key", info.ApiKey)
 	anthropicVersion := c.Request.Header.Get("anthropic-version")
 	if anthropicVersion == "" {

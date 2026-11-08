@@ -140,8 +140,17 @@ func selectPluginOAuthPoolChannel(c *gin.Context, modelName string, retry *Retry
 	}
 	value, exists := c.Get(jsplugin.ContextKeyPinnedRoute)
 	pinned, ok := value.(jsplugin.PinnedRoute)
-	if !exists || !ok || pinned.Plugin == nil || pinned.Plugin.Meta.Auth.OAuth == nil || pinned.Plugin.Meta.Auth.OAuth.Provider == "" {
-		return nil, "", nil, false
+	expectedPlugin := ""
+	if exists && ok && pinned.Plugin != nil && pinned.Plugin.Meta.Auth.OAuth != nil && pinned.Plugin.Meta.Auth.OAuth.Provider != "" {
+		expectedPlugin = pinned.Plugin.Meta.Key
+	}
+	constraints := GetChannelConstraints(c)
+	pin, hasPin, _ := constraints.ResolvedPin()
+	if hasPin {
+		pinnedChannel, err := model.CacheGetChannel(pin.ChannelId)
+		if err != nil || pluginOAuthChannelKey(pinnedChannel) == "" || !pluginoauth.IsManagedKey(pinnedChannel.Key) {
+			return nil, "", nil, false
+		}
 	}
 	ReleasePluginOAuthPool(c)
 	groups := []string{retry.TokenGroup}
@@ -149,18 +158,21 @@ func selectPluginOAuthPoolChannel(c *gin.Context, modelName string, retry *Retry
 		groups = GetRequestAutoGroups(c, common.GetContextKeyString(c, constant.ContextKeyUserGroup))
 	}
 	var candidates []*model.Channel
-	pin, hasPin, _ := GetChannelConstraints(c).ResolvedPin()
 	usingGroup := retry.TokenGroup
 	for _, group := range groups {
-		eligible, err := model.EligibleChannels(group, modelName, GetChannelConstraints(c).Filters)
+		eligible, err := model.EligibleChannels(group, modelName, constraints.Filters)
 		if err != nil {
+			if expectedPlugin == "" {
+				return nil, group, nil, false
+			}
 			return nil, group, &ChannelSelectError{StatusCode: 503, Message: "OAuth account pool is unavailable"}, true
 		}
 		for _, candidate := range eligible {
 			if hasPin && candidate.Id != pin.ChannelId {
 				continue
 			}
-			if candidate.Type == constant.ChannelTypeTaskPlugin && candidate.GetSetting().TaskPluginKey == pinned.Plugin.Meta.Key && pluginoauth.IsManagedKey(candidate.Key) && !pluginoauth.IsPendingKey(candidate.Key) {
+			pluginKey := pluginOAuthChannelKey(candidate)
+			if pluginKey != "" && (expectedPlugin == "" || pluginKey == expectedPlugin) && pluginoauth.IsManagedKey(candidate.Key) && !pluginoauth.IsPendingKey(candidate.Key) {
 				candidates = append(candidates, candidate)
 			}
 		}
@@ -170,16 +182,20 @@ func selectPluginOAuthPoolChannel(c *gin.Context, modelName string, retry *Retry
 		}
 	}
 	var agentSession string
-	for _, header := range []string{"X-Agent-Session-Id", "Session_id", "Thread_id", "Session-Id", "Thread-Id"} {
-		if agentSession = strings.TrimSpace(c.GetHeader(header)); agentSession != "" {
-			break
+	if c.Request != nil {
+		for _, header := range []string{"X-Agent-Session-Id", "Session_id", "Thread_id", "Session-Id", "Thread-Id"} {
+			if agentSession = strings.TrimSpace(c.GetHeader(header)); agentSession != "" {
+				break
+			}
 		}
 	}
 	if agentSession == "" {
-		for _, path := range []string{"prompt_cache_key", "metadata.user_id", "sessionId"} {
-			agentSession = extractChannelAffinityValue(c, operation_setting.ChannelAffinityKeySource{Type: "gjson", Path: path})
-			if agentSession != "" {
-				break
+		if c.Request != nil {
+			for _, path := range []string{"prompt_cache_key", "metadata.user_id", "sessionId"} {
+				agentSession = extractChannelAffinityValue(c, operation_setting.ChannelAffinityKeySource{Type: "gjson", Path: path})
+				if agentSession != "" {
+					break
+				}
 			}
 		}
 	}
@@ -188,7 +204,11 @@ func selectPluginOAuthPoolChannel(c *gin.Context, modelName string, retry *Retry
 	}
 	sessionKey := ""
 	if agentSession != "" {
-		digest := sha256.Sum256([]byte(fmt.Sprintf("%d:%d:%s:%s:%s:%s", c.GetInt("id"), common.GetContextKeyInt(c, constant.ContextKeyTokenId), pinned.Plugin.Meta.Key, usingGroup, modelName, agentSession)))
+		pluginKey := expectedPlugin
+		if pluginKey == "" && len(candidates) > 0 {
+			pluginKey = pluginOAuthChannelKey(candidates[0])
+		}
+		digest := sha256.Sum256([]byte(fmt.Sprintf("%d:%d:%s:%s:%s:%s", c.GetInt("id"), common.GetContextKeyInt(c, constant.ContextKeyTokenId), pluginKey, usingGroup, modelName, agentSession)))
 		sessionKey = hex.EncodeToString(digest[:])
 	}
 	c.Set(OAuthPoolSessionKey, sessionKey)
@@ -212,6 +232,9 @@ func selectPluginOAuthPoolChannel(c *gin.Context, modelName string, retry *Retry
 			return chosen, usingGroup, nil, true
 		}
 		if len(candidates) == 0 {
+			if expectedPlugin == "" {
+				return nil, usingGroup, nil, false
+			}
 			return nil, usingGroup, &ChannelSelectError{StatusCode: 503, Message: "No connected OAuth account is available for this model and group"}, true
 		}
 		pluginOAuthPool.mu.Lock()

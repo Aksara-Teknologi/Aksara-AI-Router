@@ -1,6 +1,7 @@
 package gemini
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -44,7 +45,7 @@ func (a *Adaptor) ConvertGeminiRequest(c *gin.Context, info *relaycommon.RelayIn
 			}
 		}
 	}
-	return request, nil
+	return adaptAntigravityRequest(c, info, request)
 }
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayInfo, req *dto.ClaudeRequest) (any, error) {
@@ -56,7 +57,7 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayIn
 	if !ok {
 		return nil, fmt.Errorf("expected Gemini generateContent request, got %T", result.Value)
 	}
-	return geminiRequest, nil
+	return adaptAntigravityRequest(c, info, geminiRequest)
 }
 
 func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.AudioRequest) (io.Reader, error) {
@@ -65,6 +66,9 @@ func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInf
 }
 
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {
+	if isAntigravityOAuth(info) {
+		return nil, errors.New("antigravity OAuth channels support generateContent models only")
+	}
 	if !strings.HasPrefix(info.UpstreamModelName, "imagen") {
 		return nil, errors.New("not supported model for image generation, only imagen models are supported")
 	}
@@ -135,6 +139,20 @@ func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
 }
 
 func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
+	if isAntigravityOAuth(info) {
+		if strings.HasPrefix(info.UpstreamModelName, "imagen") ||
+			strings.Contains(info.UpstreamModelName, "embedding") {
+			return "", errors.New("antigravity OAuth channels support generateContent models only")
+		}
+		action := "generateContent"
+		if info.IsStream {
+			action = "streamGenerateContent?alt=sse"
+			if info.RelayMode == constant.RelayModeGemini {
+				info.DisablePing = true
+			}
+		}
+		return strings.TrimRight(info.ChannelBaseUrl, "/") + "/v1internal:" + action, nil
+	}
 
 	version := model_setting.GetGeminiVersionSetting(info.UpstreamModelName)
 
@@ -164,6 +182,19 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Header, info *relaycommon.RelayInfo) error {
 	channel.SetupApiRequestHeader(info, c, req)
+	if token, managed, err := service.ResolveNativeChannelOAuthToken(context.Background(), info.ChannelId, "antigravity-oauth"); managed {
+		if err != nil {
+			return err
+		}
+		req.Del("x-goog-api-key")
+		req.Set("Authorization", "Bearer "+token)
+		req.Set("Content-Type", "application/json")
+		req.Set("User-Agent", "antigravity/1.0")
+		req.Set("x-request-source", "local")
+		return nil
+	} else if err != nil {
+		return err
+	}
 	req.Set("x-goog-api-key", info.ApiKey)
 	return nil
 }
@@ -176,7 +207,7 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 	if err != nil {
 		return nil, err
 	}
-	return result.Value, nil
+	return adaptAntigravityRequest(c, info, result.Value)
 }
 
 func (a *Adaptor) ConvertRerankRequest(c *gin.Context, relayMode int, request dto.RerankRequest) (any, error) {
@@ -184,6 +215,9 @@ func (a *Adaptor) ConvertRerankRequest(c *gin.Context, relayMode int, request dt
 }
 
 func (a *Adaptor) ConvertEmbeddingRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.EmbeddingRequest) (any, error) {
+	if isAntigravityOAuth(info) {
+		return nil, errors.New("antigravity OAuth channels support generateContent models only")
+	}
 	if request.Input == nil {
 		return nil, errors.New("input is required")
 	}
@@ -250,7 +284,7 @@ func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommo
 	if !ok {
 		return nil, fmt.Errorf("expected Gemini generateContent request, got %T", result.Value)
 	}
-	return geminiRequest, nil
+	return adaptAntigravityRequest(c, info, geminiRequest)
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, requestBody io.Reader) (any, error) {
@@ -258,6 +292,11 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.NewAPIError) {
+	if isAntigravityOAuth(info) {
+		if unwrapErr := unwrapAntigravityHTTPResponse(resp, info.IsStream); unwrapErr != nil {
+			return nil, types.NewError(unwrapErr, types.ErrorCodeReadResponseBodyFailed)
+		}
+	}
 	if info.RelayMode == constant.RelayModeResponses {
 		if info.IsStream {
 			return GeminiResponsesStreamHandler(c, info, resp)

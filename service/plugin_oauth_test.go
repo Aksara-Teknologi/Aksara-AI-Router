@@ -460,7 +460,8 @@ func TestAksaraPersonalProfileDatabaseMatrix(t *testing.T) {
 				require.True(t, pluginoauth.IsPendingKey(channel.Key))
 				require.Equal(t, "default", channel.Group)
 				require.NotEmpty(t, channel.GetBaseURL())
-				require.NotEmpty(t, channel.GetSetting().TaskPluginKey)
+				require.NotEqual(t, constant.ChannelTypeTaskPlugin, channel.Type)
+				require.Empty(t, channel.GetSetting().TaskPluginKey)
 			}
 			testPluginOAuthPoolRouting(t, channels)
 			price, ok := billing_setting.GetPluginBillingExpr("codex-oauth", "gpt-6.1-sol")
@@ -517,7 +518,7 @@ func testPluginOAuthPoolRouting(t *testing.T, channels []model.Channel) {
 	effective, err := pluginoauth.ProviderConfig("codex")
 	require.NoError(t, err)
 	for _, channel := range channels {
-		if channel.GetSetting().TaskPluginKey != "codex-oauth" {
+		if channel.Type != constant.ChannelTypeCodex {
 			continue
 		}
 		credential, err := pluginoauth.Seal(pluginoauth.Credential{AccessToken: "fixture-only", AccountID: channel.Name, ExpiresAt: time.Now().Add(time.Hour).Unix(), ConfigHash: effective.Hash()}, pluginOAuthBinding(channel.Id, "codex-oauth"))

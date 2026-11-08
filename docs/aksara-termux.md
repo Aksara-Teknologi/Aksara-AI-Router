@@ -135,7 +135,7 @@ Mode pool ini khusus plugin OAuth bawaan dan mendahului affinity umum New API.
 Codex menerima `prompt_cache_key` stabil jika klien belum mengirimkannya.
 Antigravity menerima `sessionId` stabil. Field cache native Claude seperti
 `cache_control` tetap diteruskan dari klien. Jika klien belum menentukan cache
-di top level atau blok, plugin Claude menambahkan automatic cache ephemeral
+di top level atau blok, adaptor Claude OAuth menambahkan cache ephemeral
 (TTL default penyedia, biasanya lima menit). Set `PLUGIN_OAUTH_AUTO_CACHE=false`
 untuk menonaktifkan penambahan otomatis ini. Kebijakan ini mengikuti
 [dokumentasi prompt caching Claude](https://platform.claude.com/docs/en/build-with-claude/prompt-caching).
@@ -151,32 +151,40 @@ dengan konsekuensi cache dingin. Akun yang menerima 429/401/403/503 diberi coold
 
 ## Endpoint klien
 
-| Penyedia | Base URL | Format |
-| --- | --- | --- |
-| Codex | `http://localhost:3000/codex-oauth/v1` | Responses: `POST /responses` |
-| Claude | `http://localhost:3000/claude-oauth` | Messages: `POST /v1/messages` |
-| Antigravity | `http://localhost:3000/antigravity-oauth` | Gemini: `POST /v1beta/models/{model}:generateContent` atau `:streamGenerateContent` |
+OAuth hanya mengganti autentikasi upstream channel. Semua model tetap dipanggil
+melalui endpoint relay New API yang sama, sehingga autentikasi gateway, grup,
+distributor, logging, retry, dan billing tetap mengikuti jalur standar.
 
-Contoh request Codex dari Termux, setelah `AKSARA_API_KEY` diisi secara lokal:
+| Penyedia | Base URL | Format yang didukung |
+| --- | --- | --- |
+| Codex | `http://localhost:3000/v1` | Chat Completions dan Responses; Chat Completions dikonversi ke Responses upstream |
+| Claude | `http://localhost:3000` | Chat Completions, Responses, dan Anthropic Messages (`/v1/messages`) sesuai konversi New API |
+| Antigravity (Gemini) | `http://localhost:3000` | Chat Completions, Responses, dan Gemini native (`/v1beta/models/{model}:generateContent` atau `:streamGenerateContent`) |
+
+Contoh request Codex dari Termux, setelah `AKSARA_API_KEY` diisi secara lokal,
+menggunakan endpoint standar:
 
 Bearer New API berlaku pada semua endpoint. SDK Claude juga dapat mengirim API
 key New API sebagai `x-api-key`; SDK Gemini/Antigravity dapat memakai
-`x-goog-api-key` atau `?key=`. Header lebih disarankan daripada query. Credential
-gateway dihapus sebelum hook plugin; upstream menerima token OAuth akun terpilih.
-Jika ada beberapa bentuk autentikasi, header Authorization menang.
+`x-goog-api-key` atau `?key=`. Header lebih disarankan daripada query. New API
+memvalidasi credential gateway, lalu adaptor provider memakai OAuth channel yang
+terpilih untuk autentikasi upstream.
 
 ```sh
-curl http://localhost:3000/codex-oauth/v1/responses \
+curl http://localhost:3000/v1/chat/completions \
   -H "Authorization: Bearer $AKSARA_API_KEY" \
   -H 'Content-Type: application/json' \
   -H 'X-Agent-Session-Id: agent-A-conversation-123' \
-  -d '{"model":"gpt-6.1-sol","input":"Halo","stream":true}'
+  -d '{"model":"gpt-6.1-sol","messages":[{"role":"user","content":"Halo"}],"stream":false}'
 ```
 
 Gunakan model yang tersedia pada akun Anda. Daftar deklarasi bukan jaminan akses
-langganan. Tidak ada konversi ke Chat Completions pada fork ini. Codex memakai
-`store:false`: kirim riwayat lengkap, tanpa `previous_response_id` atau background.
-Endpoint utama New API tetap memakai relay upstream yang asli.
+langganan. Codex memakai `store:false`, mengirim SSE ke upstream, lalu membuffer
+response terminal bila klien meminta non-stream. Kirim riwayat lengkap, tanpa
+`previous_response_id` atau background. Session ID stabil memberi prompt cache key
+Codex dan session ID Antigravity tanpa mengirim header sesi mentah ke provider.
+Antigravity memublikasikan model Gemini; model Claude hanya dipublikasikan oleh
+channel Anthropic supaya distributor tidak mencampur dua penyedia.
 
 ## Operasional dan update
 
