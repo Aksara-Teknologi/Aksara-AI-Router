@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: android-personal-${{ github.ref }}-${{ github.sha }}
@@ -73,7 +73,7 @@ jobs:
         run: sh scripts/build-android.sh
       - name: Prepare installable package
         run: |
-          cp deploy/termux/install.sh deploy/termux/.env.example dist/
+          cp deploy/termux/install.sh deploy/termux/update-existing.sh deploy/termux/.env.example dist/
           cp docs/aksara-termux.md dist/README.md
           cp docs/aksara-fork.md dist/FORK.md
           cp LICENSE NOTICE THIRD-PARTY-LICENSES.md THIRD-PARTY-NOTICES-9ROUTER dist/
@@ -86,3 +86,16 @@ jobs:
           path: dist/
           include-hidden-files: true
           retention-days: 30
+      - name: Package public Termux download
+        if: github.ref == 'refs/heads/main'
+        run: cd dist && zip -q -r ../aksara-ai-router-android-arm64.zip .
+      - name: Publish public Android release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="android-${GITHUB_SHA::12}"
+          gh release create "$tag" aksara-ai-router-android-arm64.zip \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Android ARM64 $tag" \
+            --notes "Public Termux package built by GitHub Actions from commit $GITHUB_SHA. Verify SHA256SUMS after downloading."

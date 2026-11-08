@@ -4,30 +4,56 @@ Fork New API untuk server pribadi Android ARM64, Android 8/API 26 atau lebih bar
 Satu proses Go, SQLite lokal, frontend tertanam dalam binary. Redis, Docker, Bun,
 dan program OAuth CLI tidak diperlukan di HP.
 
-## Instalasi
+## Instalasi baru
 
-1. Buka **Actions → Android personal server** di repository ini. Pilih run hijau
-   pada commit yang ingin dipasang dan download artifact
-   **aksara-ai-router-android-arm64**. Ekstrak ZIP di direktori privat Termux.
-2. Di Termux:
+Runner GitHub menerbitkan ZIP publik setelah build `main` sukses. Unduh langsung
+dari Termux, tanpa PAT atau login GitHub:
 
-   ```sh
-   pkg update
-   pkg install openssl-tool termux-services unzip
-   cd /path/hasil-ekstrak
-   sha256sum -c SHA256SUMS
-   sh install.sh
-   ```
+```sh
+pkg update
+pkg install curl openssl-tool termux-services unzip coreutils
+mkdir -p "$HOME/aksara-download"
+cd "$HOME/aksara-download"
+curl -fL https://github.com/Aksara-Teknologi/Aksara-AI-Router/releases/latest/download/aksara-ai-router-android-arm64.zip -o aksara-ai-router.zip
+unzip -o aksara-ai-router.zip
+sha256sum -c SHA256SUMS
+sh install.sh
+```
 
-3. Buka sesi Termux baru agar service manager aktif, kemudian:
+Buka sesi Termux baru agar service manager aktif, kemudian:
 
-   ```sh
-   sv up aksara-ai-router
-   termux-wake-lock
-   ```
+```sh
+sv up aksara-ai-router
+termux-wake-lock
+```
 
-4. Buka **http://localhost:3000** di browser pada HP yang sama. Selesaikan setup
-   administrator New API. Tidak ada username/password administrator bawaan dari fork.
+Buka **http://localhost:3000** di browser HP dan selesaikan setup administrator.
+
+## Memperbarui instance New API yang sudah ada
+
+Jangan jalankan `install.sh` untuk instance lama karena installer itu membuat
+direktori dan database baru. Unduh dan verifikasi paket dengan perintah yang sama
+di atas, lalu backup database SQLite instance lama. Jika memakai lokasi default:
+
+```sh
+sv down new-api
+cp "$HOME/new-api/new-api.db" "$HOME/new-api/new-api.db.before-aksara"
+```
+
+Jika database Anda berada di path lain, backup file pada `SQLITE_PATH` yang dipakai
+service. Setelah itu, dari direktori paket hasil ekstrak jalankan:
+
+```sh
+sh update-existing.sh "$HOME/new-api/new-api"
+sv status new-api
+```
+
+Updater mengganti hanya binary `~/new-api/new-api`, menyimpan backup binary lama
+di sampingnya, lalu menyalakan kembali service runit `new-api`. File konfigurasi dan
+database tidak dipindahkan. Pastikan service run script mengatur
+`AKSARA_PERSONAL_PROFILE=true` dan `PLUGIN_OAUTH_ENCRYPTION_KEY` dengan nilai tetap
+sebelum menghubungkan akun OAuth. Jangan membuat ulang kunci itu setelah akun
+terhubung.
 
 Android dapat menghentikan aplikasi di background. Izinkan Termux berjalan tanpa
 optimasi baterai. `termux-wake-lock` membantu menjaga CPU aktif tetapi bukan jaminan
