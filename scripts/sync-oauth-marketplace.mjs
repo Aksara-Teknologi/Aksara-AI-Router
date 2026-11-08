@@ -8,7 +8,7 @@ for (const provider of ['codex', 'claude', 'antigravity']) {
   const key = `${provider}-oauth`
   const canonical = new URL(`plugins/personal-tasks/${key}/`, repo)
   const source = await readFile(new URL('plugin.js', canonical), 'utf8')
-  const { meta } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
+  const { meta } = await import(new URL('plugin.js', canonical).href)
   const destination = new URL(`web/public/oauth-marketplace/plugins/${key}/${meta.version}/`, repo)
   await mkdir(destination, { recursive: true })
   await copyFile(new URL('plugin.js', canonical), new URL('plugin.js', destination))
