@@ -191,7 +191,6 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Header, info *rel
 		req.Set("Authorization", "Bearer "+token)
 		req.Set("Content-Type", "application/json")
 		req.Set("User-Agent", pluginoauth.AntigravityUserAgent)
-		req.Set("x-request-source", "local")
 		return nil
 	} else if err != nil {
 		return err

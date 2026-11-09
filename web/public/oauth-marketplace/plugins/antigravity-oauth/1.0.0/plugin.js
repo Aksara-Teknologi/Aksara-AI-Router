@@ -5,7 +5,7 @@ export const meta = {
   description: { en: 'Google Antigravity OAuth with Gemini generateContent and streamGenerateContent.', zh: '通过 Google Antigravity OAuth 使用 Gemini generateContent 和 streamGenerateContent。' },
   baseUrl: 'https://daily-cloudcode-pa.googleapis.com',
   allowedHosts: ['accounts.google.com', 'oauth2.googleapis.com', 'cloudcode-pa.googleapis.com'],
-  models: ['gemini-4-argon-high', 'gemini-4-argon-medium', 'gemini-4-argon-low', 'gemini-3.8-flash', 'gemini-3.7-flash-high', 'gemini-pro-agent', 'claude-sonnet-5-5', 'claude-opus-5-5', 'claude-sonnet-4-6', 'claude-opus-4-6-thinking', 'gpt-oss-120b-medium'],
+  models: ['gemini-4-argon-high', 'gemini-4-argon-medium', 'gemini-4-argon-low', 'gemini-3.8-flash', 'gemini-3.8-flash-high', 'gemini-3.8-flash-medium', 'gemini-3.8-flash-low', 'gemini-3.7-flash-high', 'gemini-3.7-flash-medium', 'gemini-3.7-flash-low', 'gemini-3.6-flash-high', 'gemini-3.6-flash-medium', 'gemini-3.6-flash-low', 'gemini-pro-agent', 'gemini-3.1-pro-high', 'gemini-3.1-pro-low', 'gpt-oss-120b-medium'],
   fetchMode: 'per_task', submitResponseTypes: ['json', 'sse'],
   requiredCapabilities: ['oauth2-pkce@1', 'submit-sse-render@1'],
   auth: { type: 'oauth2_pkce', oauth: { provider: 'antigravity' } },
@@ -41,7 +41,7 @@ export function buildSubmitRequest(ctx) {
   return {
     url: ctx.baseUrl.replace(/\/$/, '') + '/v1internal:' + (streaming ? 'streamGenerateContent?alt=sse' : 'generateContent'),
     method: 'POST', responseType: streaming ? 'sse' : 'json',
-    headers: { Authorization: ctx.authHeader, 'Content-Type': 'application/json', 'User-Agent': 'antigravity/1.0', 'x-request-source': 'local' },
+    headers: { Authorization: ctx.authHeader, 'Content-Type': 'application/json', 'User-Agent': 'antigravity/hub/2.24.0 darwin/arm64', 'x-request-source': 'local' },
     body: { project: ctx.oauth.projectId, model: aliases[model] || model, userAgent: 'antigravity', requestId: 'agent/' + ctx.publicTaskId + '/' + utils.unixNow() + '/' + ctx.publicTaskId + '/1', request },
   };
 }

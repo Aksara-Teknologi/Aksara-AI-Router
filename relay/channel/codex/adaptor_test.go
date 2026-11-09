@@ -81,3 +81,56 @@ func TestConvertOpenAIResponsesRequestDropsUnsupportedSamplingFields(t *testing.
 	assert.Nil(t, request.FrequencyPenalty)
 	assert.Nil(t, request.PresencePenalty)
 }
+
+func TestBuildCodexOAuthRequest(t *testing.T) {
+	request := dto.OpenAIResponsesRequest{
+		Model:              "gpt-6-astra",
+		Input:              json.RawMessage(`[{"type":"message","role":"system","id":"msg_1","content":"be brief"},{"type":"item_reference","id":"rs_1"},{"type":"function_call","id":"fc_1","call_id":"c1","name":"f","arguments":"{}"}]`),
+		PreviousResponseID: "resp_9",
+		User:               json.RawMessage(`"u"`),
+		Tools:              json.RawMessage(`[{"type":"function","function":{"name":"run","parameters":{"type":"object","properties":{"a":{"type":"string","pattern":"\\p{L}+"}}}}}]`),
+		ServiceTier:        "fast",
+	}
+	body, err := buildCodexOAuthRequest(request, "session-1")
+	require.NoError(t, err)
+
+	assert.Equal(t, true, body["stream"])
+	assert.Equal(t, false, body["store"])
+	assert.Equal(t, "session-1", body["prompt_cache_key"])
+	assert.Equal(t, "priority", body["service_tier"])
+	assert.NotEmpty(t, body["instructions"])
+	assert.NotContains(t, body, "previous_response_id")
+	assert.NotContains(t, body, "user")
+	assert.Equal(t, []any{"reasoning.encrypted_content"}, body["include"])
+	assert.Equal(t, map[string]any{"effort": "low", "summary": "auto"}, body["reasoning"])
+
+	input := body["input"].([]any)
+	require.Len(t, input, 2)
+	assert.Equal(t, "developer", input[0].(map[string]any)["role"])
+	assert.NotContains(t, input[0], "id")
+	assert.NotContains(t, input[1], "id")
+
+	tool := body["tools"].([]any)[0].(map[string]any)
+	assert.Equal(t, "run", tool["name"])
+	assert.NotContains(t, tool, "function")
+	assert.NotContains(t, tool["parameters"].(map[string]any)["properties"].(map[string]any)["a"], "pattern")
+}
+
+func TestBuildCodexOAuthRequestLiteModel(t *testing.T) {
+	request := dto.OpenAIResponsesRequest{
+		Model: "gpt-6.1-sol",
+		Input: json.RawMessage(`"hi"`),
+		Tools: json.RawMessage(`[{"type":"function","name":"run","parameters":{"type":"object"}}]`),
+	}
+	body, err := buildCodexOAuthRequest(request, "")
+	require.NoError(t, err)
+
+	assert.Nil(t, body["tools"])
+	assert.Equal(t, "", body["instructions"])
+	assert.Equal(t, false, body["parallel_tool_calls"])
+	assert.Equal(t, map[string]any{"effort": "medium", "context": "all_turns"}, body["reasoning"])
+	input := body["input"].([]any)
+	require.Len(t, input, 3)
+	assert.Equal(t, "additional_tools", input[0].(map[string]any)["type"])
+	assert.Len(t, input[0].(map[string]any)["tools"], 1)
+}

@@ -103,19 +103,14 @@ func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommo
 		return request, nil
 	}
 	if info != nil && pluginoauth.IsManagedKey(info.ApiKey) {
-		if len(request.PromptCacheKey) == 0 && c != nil {
-			if value, exists := c.Get(service.OAuthPoolSessionKey); exists {
-				if sessionKey, ok := value.(string); ok && sessionKey != "" {
-					cacheKey, err := json.Marshal(sessionKey)
-					if err != nil {
-						return nil, err
-					}
-					request.PromptCacheKey = cacheKey
-				}
-			}
+		body, err := buildCodexOAuthRequest(request, codexOAuthSessionKey(c))
+		if err != nil {
+			return nil, err
 		}
-		stream := true
-		request.Stream = &stream
+		if c != nil {
+			c.Set(codexLiteContextKey, body["tools"] == nil)
+		}
+		return body, nil
 	}
 	// codex: store must be false
 	request.Store = json.RawMessage("false")
@@ -191,18 +186,18 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Header, info *rel
 		}
 		req.Set("Authorization", "Bearer "+token)
 		req.Set("chatgpt-account-id", routing["accountId"])
-		if req.Get("OpenAI-Beta") == "" {
-			req.Set("OpenAI-Beta", "responses=experimental")
+		req.Set("OpenAI-Beta", "responses=experimental")
+		req.Set("originator", "codex_cli_rs")
+		req.Set("User-Agent", "codex_cli_rs/"+CodexCLIVersion)
+		req.Set("version", CodexCLIVersion)
+		if sessionKey := codexOAuthSessionKey(c); sessionKey != "" {
+			req.Set("session_id", sessionKey)
 		}
-		if req.Get("originator") == "" {
-			req.Set("originator", "codex_cli_rs")
+		if lite, _ := c.Get(codexLiteContextKey); lite == true {
+			req.Set("x-openai-internal-codex-responses-lite", "true")
 		}
 		req.Set("Content-Type", "application/json")
-		if info.IsStream || pluginoauth.IsManagedKey(info.ApiKey) {
-			req.Set("Accept", "text/event-stream")
-		} else {
-			req.Set("Accept", "application/json")
-		}
+		req.Set("Accept", "text/event-stream")
 		return nil
 	} else if err != nil {
 		return err

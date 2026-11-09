@@ -11,13 +11,12 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/pluginoauth"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
 const antigravityOAuthKey = "antigravity-oauth"
@@ -26,16 +25,32 @@ func isAntigravityOAuth(info *relaycommon.RelayInfo) bool {
 	return info != nil && pluginoauth.IsManagedKey(info.ApiKey)
 }
 
+// antigravityModels maps public model ids to the tiered ids the Hub client
+// sends upstream (decolua/9router, MIT). Unlisted ids pass through unchanged.
+var antigravityModels = map[string]string{
+	"gemini-4-argon-high":     "gemini-4-argon-high(high)",
+	"gemini-4-argon-medium":   "gemini-4-argon-medium(medium)",
+	"gemini-4-argon-low":      "gemini-4-argon-low(low)",
+	"gemini-3.8-flash-high":   "gemini-3.8-flash-high(high)",
+	"gemini-3.8-flash-medium": "gemini-3.8-flash-medium(medium)",
+	"gemini-3.8-flash-low":    "gemini-3.8-flash-low(low)",
+	"gemini-3.8-flash":        "gemini-3.8-flash-medium(medium)",
+	"gemini-3.7-flash-high":   "gemini-3.7-flash-tiered(high)",
+	"gemini-3.7-flash-medium": "gemini-3.7-flash-tiered(medium)",
+	"gemini-3.7-flash-low":    "gemini-3.7-flash-tiered(low)",
+	"gemini-3.6-flash-high":   "gemini-3.6-flash-tiered(high)",
+	"gemini-3.6-flash-medium": "gemini-3.6-flash-tiered(medium)",
+	"gemini-3.6-flash-low":    "gemini-3.6-flash-tiered(low)",
+	"gemini-3.1-pro-high":     "gemini-pro-agent",
+	"gemini-3.1-pro-low":      "gemini-3.1-pro-low(low)",
+	"claude-sonnet-5-5-high":  "claude-sonnet-5-5-high(high)",
+	"claude-sonnet-5-5":       "claude-sonnet-5-5-high(high)",
+	"claude-opus-5-5-high":    "claude-opus-5-5-high(high)",
+	"claude-opus-5-5":         "claude-opus-5-5-high(high)",
+}
+
 func antigravityModelName(model string) string {
-	aliases := map[string]string{
-		"gemini-4-argon-high":   "gemini-4-argon-high(high)",
-		"gemini-4-argon-medium": "gemini-4-argon-medium(medium)",
-		"gemini-4-argon-low":    "gemini-4-argon-low(low)",
-		"gemini-3.8-flash":      "gemini-3.8-flash-medium(medium)",
-		"claude-sonnet-5-5":     "claude-sonnet-5-5-high(high)",
-		"claude-opus-5-5":       "claude-opus-5-5-high(high)",
-	}
-	if mapped, ok := aliases[model]; ok {
+	if mapped, ok := antigravityModels[model]; ok {
 		return mapped
 	}
 	return model
@@ -73,32 +88,34 @@ func adaptAntigravityRequest(c *gin.Context, info *relaycommon.RelayInfo, reques
 	if err != nil {
 		return nil, err
 	}
-	data, err := json.Marshal(request)
+	data, err := common.Marshal(request)
 	if err != nil {
 		return nil, err
 	}
 	var geminiRequest map[string]any
-	if err := json.Unmarshal(data, &geminiRequest); err != nil {
+	if err := common.Unmarshal(data, &geminiRequest); err != nil {
 		return nil, err
 	}
-	if sessionID := antigravitySessionID(c); sessionID != "" {
+	sessionID := antigravitySessionID(c)
+	if sessionID != "" {
 		if _, exists := geminiRequest["sessionId"]; !exists {
 			geminiRequest["sessionId"] = sessionID
 		}
 	}
-	taskID := uuid.NewString()
+	upstreamModel := antigravityModelName(info.UpstreamModelName)
+	normalizeAntigravityRequest(geminiRequest)
 	return map[string]any{
 		"project":   routing["projectId"],
-		"model":     antigravityModelName(info.UpstreamModelName),
+		"model":     upstreamModel,
 		"userAgent": "antigravity",
-		"requestId": "agent/" + taskID + "/" + strconv.FormatInt(time.Now().Unix(), 10) + "/" + taskID + "/1",
+		"requestId": antigravityRequestID(sessionID, upstreamModel, geminiRequest),
 		"request":   geminiRequest,
 	}, nil
 }
 
 func unwrapAntigravityResponse(body []byte) []byte {
 	var envelope map[string]json.RawMessage
-	if json.Unmarshal(body, &envelope) != nil {
+	if common.Unmarshal(body, &envelope) != nil {
 		return body
 	}
 	response, ok := envelope["response"]
