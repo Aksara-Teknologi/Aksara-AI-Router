@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"github.com/QuantumNous/new-api/pkg/pluginoauth"
 	"net/http"
 	"strings"
 	"time"
@@ -46,6 +47,26 @@ func FetchCodexChannelModels(channel *model.Channel) ([]string, error) {
 	return fetchCodexChannelModels(ctx, channel, baseURL, client, clientVersion)
 }
 
+// fetchManagedCodexChannelModels lists models for a connected Codex OAuth account.
+func fetchManagedCodexChannelModels(ctx context.Context, channel *model.Channel, baseURL string, client *http.Client, clientVersion string) ([]string, error) {
+	token, err := ResolvePluginOAuthToken(ctx, channel.Id, "codex-oauth")
+	if err != nil {
+		return nil, err
+	}
+	routing, err := PluginOAuthRouting(channel.Id, "codex-oauth", token)
+	if err != nil {
+		return nil, err
+	}
+	statusCode, models, err := FetchCodexModels(ctx, client, baseURL, &CodexOAuthKey{AccessToken: token, AccountID: routing["accountId"]}, clientVersion)
+	if err != nil {
+		return nil, err
+	}
+	if statusCode < http.StatusOK || statusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("upstream status: %d", statusCode)
+	}
+	return models, nil
+}
+
 func fetchCodexChannelModels(
 	ctx context.Context,
 	channel *model.Channel,
@@ -53,6 +74,9 @@ func fetchCodexChannelModels(
 	client *http.Client,
 	clientVersion string,
 ) ([]string, error) {
+	if pluginoauth.IsManagedKey(channel.Key) {
+		return fetchManagedCodexChannelModels(ctx, channel, baseURL, client, clientVersion)
+	}
 	oauthKey, err := parseCodexOAuthKey(strings.TrimSpace(channel.Key))
 	if err != nil {
 		return nil, err

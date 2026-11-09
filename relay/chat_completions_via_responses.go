@@ -1,6 +1,8 @@
 package relay
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -165,7 +167,7 @@ func relayResponsesRequest(c *gin.Context, info *relaycommon.RelayInfo, adaptor 
 
 	httpResp = resp.(*http.Response)
 	clientStream := info.IsStream
-	upstreamStream := isResponsesEventStreamContentType(httpResp.Header.Get("Content-Type"))
+	upstreamStream := isResponsesEventStreamContentType(httpResp.Header.Get("Content-Type")) || sniffResponsesEventStream(httpResp)
 	info.IsStream = clientStream || upstreamStream
 	if httpResp.StatusCode != http.StatusOK {
 		newApiErr := service.RelayErrorHandler(c.Request.Context(), httpResp, false)
@@ -201,4 +203,19 @@ func relayResponsesRequest(c *gin.Context, info *relaycommon.RelayInfo, adaptor 
 
 func isResponsesEventStreamContentType(contentType string) bool {
 	return strings.Contains(strings.ToLower(contentType), "text/event-stream")
+}
+
+// sniffResponsesEventStream detects an SSE body that arrives without an
+// event-stream Content-Type, as the ChatGPT Codex backend sometimes does.
+func sniffResponsesEventStream(resp *http.Response) bool {
+	if resp.Body == nil {
+		return false
+	}
+	reader := bufio.NewReader(resp.Body)
+	prefix, _ := reader.Peek(6)
+	resp.Body = struct {
+		io.Reader
+		io.Closer
+	}{reader, resp.Body}
+	return bytes.HasPrefix(prefix, []byte("event:")) || bytes.HasPrefix(prefix, []byte("data:"))
 }

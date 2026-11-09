@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -276,4 +277,18 @@ func TestApplySystemPromptIfNeededSkipsToolLoadingMessages(t *testing.T) {
 			assert.Equal(t, tt.wantOverride, overrideSet)
 		})
 	}
+}
+
+func TestSniffResponsesEventStream(t *testing.T) {
+	sse := &http.Response{Body: io.NopCloser(strings.NewReader("event: response.created\ndata: {}\n\n"))}
+	require.True(t, sniffResponsesEventStream(sse))
+	body, err := io.ReadAll(sse.Body)
+	require.NoError(t, err)
+	require.Equal(t, "event: response.created\ndata: {}\n\n", string(body))
+
+	plain := &http.Response{Body: io.NopCloser(strings.NewReader(`{"id":"resp_1"}`))}
+	require.False(t, sniffResponsesEventStream(plain))
+	body, err = io.ReadAll(plain.Body)
+	require.NoError(t, err)
+	require.Equal(t, `{"id":"resp_1"}`, string(body))
 }
