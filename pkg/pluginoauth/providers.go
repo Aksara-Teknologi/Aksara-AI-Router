@@ -11,6 +11,11 @@ import (
 	"github.com/QuantumNous/new-api/common"
 )
 
+// AntigravityUserAgent identifies the current Hub client family. Google gates
+// some Code Assist models on this family and client version, so keep this in
+// sync for OAuth setup and inference requests.
+const AntigravityUserAgent = "antigravity/hub/2.24.0 darwin/arm64"
+
 // ProviderConfig pins installed-client endpoints and callbacks. Provider data is
 // based on decolua/9router (MIT), revision 1339107e624d1ab150c6a0c2c2ee22caa7e9db2f.
 func ProviderConfig(provider string) (*Config, error) {
@@ -99,7 +104,7 @@ func CompleteProvider(ctx context.Context, client *http.Client, config Config, c
 	}
 	request.Header.Set("Authorization", "Bearer "+credential.AccessToken)
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("User-Agent", "antigravity/1.0")
+	request.Header.Set("User-Agent", AntigravityUserAgent)
 	bounded := *client
 	bounded.Timeout = 20 * time.Second
 	bounded.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }

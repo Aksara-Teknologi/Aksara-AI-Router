@@ -53,9 +53,9 @@ func TestBufferCodexOAuthResponseStreamRequiresTerminalEvent(t *testing.T) {
 	assert.ErrorContains(t, bufferCodexOAuthResponseStream(resp), "without a terminal response")
 }
 
-// The Codex backend rejects these fields, so the adaptor clears them rather
-// than forwarding what the client sent.
-func TestConvertOpenAIResponsesRequestDropsPenalties(t *testing.T) {
+// The Codex backend rejects these sampling fields, so the adaptor clears them
+// rather than forwarding what the client sent.
+func TestConvertOpenAIResponsesRequestDropsUnsupportedSamplingFields(t *testing.T) {
 	adaptor := &Adaptor{}
 	info := &relaycommon.RelayInfo{
 		ChannelMeta: &relaycommon.ChannelMeta{ChannelType: constant.ChannelTypeCodex},
@@ -67,6 +67,7 @@ func TestConvertOpenAIResponsesRequestDropsPenalties(t *testing.T) {
 		Input:            json.RawMessage(`"hello"`),
 		MaxOutputTokens:  lo.ToPtr(uint(128)),
 		Temperature:      lo.ToPtr(1.0),
+		TopP:             lo.ToPtr(0.95),
 		FrequencyPenalty: json.RawMessage(`1.5`),
 		PresencePenalty:  json.RawMessage(`1.5`),
 	})
@@ -76,6 +77,7 @@ func TestConvertOpenAIResponsesRequestDropsPenalties(t *testing.T) {
 	require.True(t, ok)
 	assert.Nil(t, request.MaxOutputTokens)
 	assert.Nil(t, request.Temperature)
+	assert.Nil(t, request.TopP)
 	assert.Nil(t, request.FrequencyPenalty)
 	assert.Nil(t, request.PresencePenalty)
 }

@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/QuantumNous/new-api/pkg/pluginoauth"
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/constant"
@@ -189,7 +190,7 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Header, info *rel
 		req.Del("x-goog-api-key")
 		req.Set("Authorization", "Bearer "+token)
 		req.Set("Content-Type", "application/json")
-		req.Set("User-Agent", "antigravity/1.0")
+		req.Set("User-Agent", pluginoauth.AntigravityUserAgent)
 		req.Set("x-request-source", "local")
 		return nil
 	} else if err != nil {

@@ -120,6 +120,9 @@ func TestPluginOAuthProviderPresets(t *testing.T) {
 					require.Equal(t, verifier, values["code_verifier"])
 				case "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist":
 					require.Equal(t, "Bearer native-access", request.Header.Get("Authorization"))
+					if provider == "antigravity" {
+						require.Equal(t, pluginoauth.AntigravityUserAgent, request.Header.Get("User-Agent"))
+					}
 					body = `{"allowedTiers":[{"id":"free-tier","isDefault":true}]}`
 				case "https://cloudcode-pa.googleapis.com/v1internal:onboardUser":
 					var payload map[string]any

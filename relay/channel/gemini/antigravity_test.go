@@ -9,10 +9,12 @@ import (
 
 func TestAntigravityModelAliases(t *testing.T) {
 	tests := map[string]string{
-		"gemini-3.8-flash":    "gemini-3.8-flash-medium(medium)",
-		"claude-sonnet-5-5":   "claude-sonnet-5-5-high(high)",
-		"claude-opus-5-5":     "claude-opus-5-5-high(high)",
-		"gemini-4-argon-high": "gemini-4-argon-high",
+		"gemini-4-argon-high":   "gemini-4-argon-high(high)",
+		"gemini-4-argon-medium": "gemini-4-argon-medium(medium)",
+		"gemini-4-argon-low":    "gemini-4-argon-low(low)",
+		"gemini-3.8-flash":      "gemini-3.8-flash-medium(medium)",
+		"claude-sonnet-5-5":     "claude-sonnet-5-5-high(high)",
+		"claude-opus-5-5":       "claude-opus-5-5-high(high)",
 	}
 	for input, expected := range tests {
 		if actual := antigravityModelName(input); actual != expected {
