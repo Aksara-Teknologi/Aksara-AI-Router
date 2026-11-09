@@ -15,7 +15,8 @@ func TestAntigravityModelAliases(t *testing.T) {
 		"gemini-4-argon-high":   "gemini-4-argon-high(high)",
 		"gemini-4-argon-medium": "gemini-4-argon-medium(medium)",
 		"gemini-4-argon-low":    "gemini-4-argon-low(low)",
-		"gemini-3.8-flash":      "gemini-3.8-flash-medium(medium)",
+		"gemini-3.8-flash":      "gemini-3.8-flash-tiered",
+		"gemini-3.8-flash-high": "gemini-3.8-flash-tiered(high)",
 		"claude-sonnet-5-5":     "claude-sonnet-5-5-high(high)",
 		"claude-opus-5-5":       "claude-opus-5-5-high(high)",
 	}

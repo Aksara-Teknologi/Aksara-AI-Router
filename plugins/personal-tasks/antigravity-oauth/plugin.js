@@ -5,7 +5,7 @@ export const meta = {
   description: { en: 'Google Antigravity OAuth with Gemini generateContent and streamGenerateContent.', zh: '通过 Google Antigravity OAuth 使用 Gemini generateContent 和 streamGenerateContent。' },
   baseUrl: 'https://daily-cloudcode-pa.googleapis.com',
   allowedHosts: ['accounts.google.com', 'oauth2.googleapis.com', 'cloudcode-pa.googleapis.com'],
-  models: ['gemini-4-argon-high', 'gemini-4-argon-medium', 'gemini-4-argon-low', 'gemini-3.8-flash', 'gemini-3.8-flash-high', 'gemini-3.8-flash-medium', 'gemini-3.8-flash-low', 'gemini-3.7-flash-high', 'gemini-3.7-flash-medium', 'gemini-3.7-flash-low', 'gemini-3.6-flash-high', 'gemini-3.6-flash-medium', 'gemini-3.6-flash-low', 'gemini-pro-agent', 'gemini-3.1-pro-high', 'gemini-3.1-pro-low', 'gpt-oss-120b-medium'],
+  models: ['gemini-4-argon-high', 'gemini-4-argon-medium', 'gemini-4-argon-low', 'gemini-3.8-flash', 'gemini-3.8-flash-tiered', 'gemini-3.8-flash-high', 'gemini-3.8-flash-medium', 'gemini-3.8-flash-low', 'gemini-3.7-flash-high', 'gemini-3.7-flash-medium', 'gemini-3.7-flash-low', 'gemini-3.6-flash-high', 'gemini-3.6-flash-medium', 'gemini-3.6-flash-low', 'gemini-pro-agent', 'gemini-3.1-pro-high', 'gemini-3.1-pro-low', 'gpt-oss-120b-medium'],
   fetchMode: 'per_task', submitResponseTypes: ['json', 'sse'],
   requiredCapabilities: ['oauth2-pkce@1', 'submit-sse-render@1'],
   auth: { type: 'oauth2_pkce', oauth: { provider: 'antigravity' } },
@@ -35,7 +35,7 @@ export function buildSubmitRequest(ctx) {
   if (config.maxOutputTokens !== undefined && (!Number.isInteger(config.maxOutputTokens) || config.maxOutputTokens < 0 || config.maxOutputTokens > 1073741823)) throw new Error('maxOutputTokens is outside the supported range');
   if (config.candidateCount !== undefined && config.candidateCount !== 1) throw new Error('Antigravity supports one candidate per request');
   const model = ctx.upstreamModel || ctx.model;
-  const aliases = { 'gemini-3.8-flash': 'gemini-3.8-flash-medium(medium)', 'claude-sonnet-5-5': 'claude-sonnet-5-5-high(high)', 'claude-opus-5-5': 'claude-opus-5-5-high(high)' };
+  const aliases = { 'gemini-3.8-flash': 'gemini-3.8-flash-tiered', 'claude-sonnet-5-5': 'claude-sonnet-5-5-high(high)', 'claude-opus-5-5': 'claude-opus-5-5-high(high)' };
   request.sessionId = request.sessionId || (ctx.agentSessionKey ? String(parseInt(ctx.agentSessionKey.slice(0, 12), 16)) : ctx.publicTaskId);
   const streaming = ctx.action === 'streamGenerateContent';
   return {
