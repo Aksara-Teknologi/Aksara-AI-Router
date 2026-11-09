@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -31,10 +32,10 @@ var antigravityModels = map[string]string{
 	"gemini-4-argon-high":     "gemini-4-argon-high(high)",
 	"gemini-4-argon-medium":   "gemini-4-argon-medium(medium)",
 	"gemini-4-argon-low":      "gemini-4-argon-low(low)",
-	"gemini-3.8-flash-high":   "gemini-3.8-flash-tiered(high)",
-	"gemini-3.8-flash-medium": "gemini-3.8-flash-tiered(medium)",
-	"gemini-3.8-flash-low":    "gemini-3.8-flash-tiered(low)",
-	"gemini-3.8-flash":        "gemini-3.8-flash-tiered",
+	"gemini-3.8-flash-high":   "gemini-3.8-flash-high(high)",
+	"gemini-3.8-flash-medium": "gemini-3.8-flash-medium(medium)",
+	"gemini-3.8-flash-low":    "gemini-3.8-flash-low(low)",
+	"gemini-3.8-flash":        "gemini-3.8-flash-medium(medium)",
 	"gemini-3.7-flash-high":   "gemini-3.7-flash-tiered(high)",
 	"gemini-3.7-flash-medium": "gemini-3.7-flash-tiered(medium)",
 	"gemini-3.7-flash-low":    "gemini-3.7-flash-tiered(low)",
@@ -54,6 +55,19 @@ func antigravityModelName(model string) string {
 		return mapped
 	}
 	return model
+}
+
+var antigravityLevelSuffix = regexp.MustCompile(`^(.*)\(([^()]+)\)$`)
+
+// splitAntigravityModel separates a trailing "(level)" from the model id. The
+// suffix selects the thinking level and is never sent upstream as part of the
+// model name; 9router strips it the same way.
+func splitAntigravityModel(model string) (id string, level string) {
+	match := antigravityLevelSuffix.FindStringSubmatch(strings.TrimSpace(model))
+	if match == nil {
+		return model, ""
+	}
+	return strings.TrimSpace(match[1]), strings.ToLower(strings.TrimSpace(match[2]))
 }
 
 func antigravitySessionID(c *gin.Context) string {
@@ -102,8 +116,19 @@ func adaptAntigravityRequest(c *gin.Context, info *relaycommon.RelayInfo, reques
 			geminiRequest["sessionId"] = sessionID
 		}
 	}
-	upstreamModel := antigravityModelName(info.UpstreamModelName)
+	upstreamModel, level := splitAntigravityModel(antigravityModelName(info.UpstreamModelName))
 	normalizeAntigravityRequest(geminiRequest)
+	// Tiered ids carry no level in their name, so send it as thinking config.
+	if level != "" && strings.HasSuffix(upstreamModel, "-tiered") {
+		config, _ := geminiRequest["generationConfig"].(map[string]any)
+		if config == nil {
+			config = map[string]any{}
+			geminiRequest["generationConfig"] = config
+		}
+		if _, exists := config["thinkingConfig"]; !exists {
+			config["thinkingConfig"] = map[string]any{"thinkingLevel": level, "includeThoughts": true}
+		}
+	}
 	return map[string]any{
 		"project":   routing["projectId"],
 		"model":     upstreamModel,

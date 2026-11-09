@@ -15,8 +15,8 @@ func TestAntigravityModelAliases(t *testing.T) {
 		"gemini-4-argon-high":   "gemini-4-argon-high(high)",
 		"gemini-4-argon-medium": "gemini-4-argon-medium(medium)",
 		"gemini-4-argon-low":    "gemini-4-argon-low(low)",
-		"gemini-3.8-flash":      "gemini-3.8-flash-tiered",
-		"gemini-3.8-flash-high": "gemini-3.8-flash-tiered(high)",
+		"gemini-3.8-flash":      "gemini-3.8-flash-medium(medium)",
+		"gemini-3.8-flash-high": "gemini-3.8-flash-high(high)",
 		"claude-sonnet-5-5":     "claude-sonnet-5-5-high(high)",
 		"claude-opus-5-5":       "claude-opus-5-5-high(high)",
 	}
@@ -136,4 +136,18 @@ func TestAntigravityRequestIDIsStablePerSession(t *testing.T) {
 	require.NotNil(t, b)
 	assert.Equal(t, a[1], b[1])
 	assert.Equal(t, a[2], b[2])
+}
+
+func TestSplitAntigravityModel(t *testing.T) {
+	id, level := splitAntigravityModel("gemini-3.8-flash-high(high)")
+	assert.Equal(t, "gemini-3.8-flash-high", id)
+	assert.Equal(t, "high", level)
+
+	id, level = splitAntigravityModel("gemini-3.8-flash-tiered")
+	assert.Equal(t, "gemini-3.8-flash-tiered", id)
+	assert.Empty(t, level)
+
+	id, level = splitAntigravityModel(antigravityModelName("gemini-3.7-flash-low"))
+	assert.Equal(t, "gemini-3.7-flash-tiered", id)
+	assert.Equal(t, "low", level)
 }
