@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/pkg/pluginoauth"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"gorm.io/gorm"
 )
 
@@ -26,14 +27,19 @@ func BootstrapAksaraPersonalProfile() error {
 	}
 	const marker = "aksara_personal_profile_v1"
 	var existing model.Option
+	profileCreated := false
 	if err := model.DB.Where(&model.Option{Key: marker}).First(&existing).Error; err == nil && existing.Value == "true" {
-		return nil
+		profileCreated = true
 	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
 	prices := billing_setting.GetPluginBillingExprCopy()
 	if prices == nil {
 		prices = make(map[string]string)
+	}
+	modelRatios := ratio_setting.GetModelRatioCopy()
+	if modelRatios == nil {
+		modelRatios = make(map[string]float64)
 	}
 	for _, key := range []string{"codex-oauth", "claude-oauth", "antigravity-oauth"} {
 		plugin, exists := jsplugin.DefaultRegistry.Get(key)
@@ -45,6 +51,14 @@ func BootstrapAksaraPersonalProfile() error {
 			if _, configured := prices[priceKey]; !configured {
 				prices[priceKey] = `tier("personal", 0)`
 			}
+			if !ratio_setting.HasConfiguredModelRatio(name) {
+				if _, fixedPrice := ratio_setting.GetModelPrice(name, false); !fixedPrice {
+					modelRatios[name] = 0
+				}
+			}
+		}
+		if profileCreated {
+			continue
 		}
 		channelType := map[string]int{"codex-oauth": constant.ChannelTypeCodex, "claude-oauth": constant.ChannelTypeAnthropic, "antigravity-oauth": constant.ChannelTypeGemini}[key]
 		for _, suffix := range []string{"A", "B"} {
@@ -73,9 +87,22 @@ func BootstrapAksaraPersonalProfile() error {
 	if err != nil {
 		return err
 	}
+	encodedModelRatios, err := common.Marshal(modelRatios)
+	if err != nil {
+		return err
+	}
 	// Startup is single-threaded here. Persist the profile options together
-	// before caches or request handlers start; existing expressions are kept.
-	return model.UpdateOptionsBulk(map[string]string{billing_setting.PluginBillingExprOption: string(encoded), "TaskPluginEnabled": "true", "RetryTimes": "2", marker: "true"})
+	// before caches or request handlers start; existing prices and ratios are kept.
+	options := map[string]string{
+		billing_setting.PluginBillingExprOption: string(encoded),
+		"ModelRatio":                            string(encodedModelRatios),
+		"TaskPluginEnabled":                     "true",
+		"RetryTimes":                            "2",
+	}
+	if !profileCreated {
+		options[marker] = "true"
+	}
+	return model.UpdateOptionsBulk(options)
 }
 
 func migrateAksaraOAuthChannels() error {

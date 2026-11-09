@@ -69,9 +69,11 @@ Pada startup pertama dengan `AKSARA_PERSONAL_PROFILE=true`:
 - Tiga plugin bawaan: **Codex OAuth**, **Claude OAuth**, **Antigravity OAuth**.
 - Enam slot channel: akun **A** dan **B** untuk setiap penyedia, grup `default`,
   priority sama, weight 100. Slot belum login tidak dipilih untuk trafik.
-- Retry budget 2. Pricing override khusus plugin bernilai **0** untuk pemakaian
-  pribadi, tanpa menghapus harga provider yang sudah dikonfigurasi. Angka nol
-  adalah kebijakan pencatatan router Anda, bukan pernyataan harga penyedia.
+- Retry budget 2. Model bawaan OAuth diberi rasio **0** hanya jika belum memiliki
+  harga atau rasio eksplisit; harga yang sudah dikonfigurasi tetap dipakai.
+  Rasio New API berlaku per nama model di seluruh channel, jadi profil ini untuk
+  instance pribadi. Angka nol adalah kebijakan pencatatan router Anda, bukan
+  pernyataan harga penyedia.
 - Batas satu inference aktif per akun; sesi hangat menunggu hingga 30 detik bila
   akunnya sibuk, lalu mengembalikan 429 dengan `Retry-After: 1`.
 

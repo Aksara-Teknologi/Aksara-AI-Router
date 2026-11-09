@@ -23,6 +23,7 @@ import (
 	"github.com/QuantumNous/new-api/pkg/pluginoauth"
 	"github.com/QuantumNous/new-api/plugins"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
@@ -436,10 +437,11 @@ func TestAksaraPersonalProfileDatabaseMatrix(t *testing.T) {
 			setupPluginOAuthDB(t, dialect)
 			t.Setenv("AKSARA_PERSONAL_PROFILE", "true")
 			previousPrices, _ := common.Marshal(billing_setting.GetPluginBillingExprCopy())
+			previousRatios := ratio_setting.ModelRatio2JSONString()
 			previousMap, previousRetries, previousEnabled := common.OptionMap, common.RetryTimes, constant.TaskPluginEnabled
 			common.OptionMap = make(map[string]string)
 			t.Cleanup(func() {
-				require.NoError(t, model.UpdateOptionsBulk(map[string]string{billing_setting.PluginBillingExprOption: string(previousPrices)}))
+				require.NoError(t, model.UpdateOptionsBulk(map[string]string{billing_setting.PluginBillingExprOption: string(previousPrices), "ModelRatio": previousRatios}))
 				common.OptionMap = previousMap
 				common.RetryTimes = previousRetries
 				constant.TaskPluginEnabled = previousEnabled
@@ -451,7 +453,7 @@ func TestAksaraPersonalProfileDatabaseMatrix(t *testing.T) {
 				require.NoError(t, err)
 			}
 			custom := `{"codex-oauth::gpt-6.1-sol":"tier(\"custom\", 0.01)"}`
-			require.NoError(t, model.UpdateOptionsBulk(map[string]string{billing_setting.PluginBillingExprOption: custom}))
+			require.NoError(t, model.UpdateOptionsBulk(map[string]string{billing_setting.PluginBillingExprOption: custom, "ModelRatio": `{"gpt-6.1-sol":0.5}`}))
 			require.NoError(t, BootstrapAksaraPersonalProfile())
 			var channels []model.Channel
 			require.NoError(t, model.DB.Find(&channels).Error)
@@ -470,6 +472,12 @@ func TestAksaraPersonalProfileDatabaseMatrix(t *testing.T) {
 			price, ok = billing_setting.GetPluginBillingExpr("claude-oauth", "claude-sonnet-5")
 			require.True(t, ok)
 			require.NoError(t, billing_setting.SmokeTestTaskExpr(price, map[string]jsplugin.UsageFieldSchema{}))
+			ratio, configured, _ := ratio_setting.GetModelRatio("gpt-6.1-sol")
+			require.True(t, configured)
+			require.Equal(t, 0.5, ratio, "explicit model ratios must be preserved")
+			ratio, configured, _ = ratio_setting.GetModelRatio("gpt-6.1-terra")
+			require.True(t, configured)
+			require.Zero(t, ratio, "native OAuth model ratios without an explicit price must default to zero")
 			require.NoError(t, model.DB.Model(&channels[0]).Update("name", "User renamed account").Error)
 			require.NoError(t, BootstrapAksaraPersonalProfile())
 			var count int64
