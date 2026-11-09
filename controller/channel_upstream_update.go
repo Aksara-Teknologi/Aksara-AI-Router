@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/QuantumNous/new-api/pkg/pluginoauth"
 	"io"
 	"net/http"
 	"net/url"
@@ -385,6 +386,14 @@ func fetchChannelUpstreamModelIDs(channel *model.Channel) ([]string, error) {
 		return normalizeModelNames(lo.Map(models, func(item ollama.OllamaModel, _ int) string {
 			return item.Name
 		})), nil
+	}
+
+	if channel.Type == constant.ChannelTypeGemini && pluginoauth.IsManagedKey(channel.Key) {
+		models, err := service.FetchAntigravityChannelModels(channel)
+		if err != nil {
+			return nil, err
+		}
+		return normalizeModelNames(models), nil
 	}
 
 	if channel.Type == constant.ChannelTypeGemini {

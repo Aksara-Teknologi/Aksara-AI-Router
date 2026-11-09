@@ -563,3 +563,9 @@ func testPluginOAuthPoolRouting(t *testing.T, channels []model.Channel) {
 	require.Nil(t, blocked, "retry must reserve the replacement account's concurrency slot")
 	ReleasePluginOAuthPool(contexts[0])
 }
+
+func TestParseAntigravityModels(t *testing.T) {
+	ids, err := parseAntigravityModels([]byte(`{"models":{"b-model":{},"a-model":{"displayName":"A"},"hidden":{"isInternal":true}}}`))
+	require.NoError(t, err)
+	require.Equal(t, []string{"a-model", "b-model"}, ids)
+}
